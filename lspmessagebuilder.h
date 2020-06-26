@@ -2,6 +2,7 @@
 #define LSPMESSAGEBUILDER_H
 
 #include <QObject>
+#include <QDateTime>
 #include <QJsonDocument>
 
 enum class LspMsgBuilderState {
@@ -9,6 +10,13 @@ enum class LspMsgBuilderState {
     Payload, // reading JSON body
     Recovery, // error encountered, looking for next header
 };
+
+enum class LspEntity {
+    Client,
+    Server,
+};
+
+QString lspEntityToQString(LspEntity entity);
 
 struct LspHeader {
     QString raw;
@@ -32,11 +40,19 @@ struct LspHeader {
 
 
 struct LspMessage {
+    qint64 timestamp;
+
+    LspEntity sender;
+
     QList<LspHeader> headers;
 
     QJsonDocument message;
 
-    LspMessage(QList<LspHeader> headers, QJsonDocument message) : message(message) {
+    LspMessage(LspEntity sender, QList<LspHeader> headers, QJsonDocument message) : LspMessage(QDateTime::currentMSecsSinceEpoch(), sender, headers, message) {}
+
+    LspMessage(qint64 timestamp, LspEntity sender, QList<LspHeader> headers, QJsonDocument message) : message(message) {
+        this->timestamp = timestamp;
+        this->sender = sender;
         this->headers = QList<LspHeader> {};
         for (LspHeader header : headers) {
             this->headers.append(header);
@@ -53,7 +69,7 @@ class LspMessageBuilder : public QObject
     Q_OBJECT
 
 public:
-    LspMessageBuilder(QObject *parent = nullptr) : QObject(parent) {}
+    LspMessageBuilder(LspEntity source, QObject *parent = nullptr) : QObject(parent), source(source) {}
 
     void append(QByteArray *data);
 
@@ -61,6 +77,8 @@ signals:
     void emitLspMessage(LspMessage *msg);
 
 private:
+    LspEntity source;
+
     LspMsgBuilderState state = LspMsgBuilderState::Headers;
 
     size_t pendingPayload = 0;

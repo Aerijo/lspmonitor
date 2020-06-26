@@ -25,6 +25,8 @@ public slots:
 
     void onServerStdout();
 
+    void onServerStderr();
+
     void onServerFinish(int exitCode, QProcess::ExitStatus exitStatus);
 
     void onLspMessage(LspMessage *msg);
@@ -36,9 +38,11 @@ private:
 
     CommLog *log;
 
-    LspMessageBuilder clientBuilder {};
+    LspMessageBuilder clientBuilder { LspEntity::Client };
 
-    LspMessageBuilder serverBuilder {};
+    LspMessageBuilder serverBuilder { LspEntity::Server };
+
+    QVector<LspMessage*> messages {};
 };
 
 #endif // STDIOMITM_H

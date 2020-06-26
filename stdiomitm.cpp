@@ -1,6 +1,7 @@
 #include "stdiomitm.h"
 
 #include <QtCore>
+#include <QString>
 #include <QScrollBar>
 #include <iostream>
 
@@ -41,16 +42,30 @@ void StdioMitm::onServerStdout() {
     std::cout.write(buff, buff.size()).flush();
 }
 
+void StdioMitm::onServerStderr() {
+    QByteArray buff = server->readAllStandardError();
+
+    std::cerr << buff.toStdString() << std::endl;
+}
+
 void StdioMitm::onLspMessage(LspMessage *msg) {
     if (log != nullptr) {
-        log->insertPlainText(msg->message.toJson());
+        log->moveCursor(QTextCursor::End);
+        log->insertPlainText(lspEntityToQString(msg->sender) + " (" + QString::number(msg->timestamp) + ") -> " + msg->message.toJson());
         log->verticalScrollBar()->setValue(log->verticalScrollBar()->maximum());
     }
 
-    delete msg;
+    messages.append(msg);
 }
 
 void StdioMitm::onServerFinish(int exitCode, QProcess::ExitStatus exitStatus) {
     std::cerr << "Server closed with code " << exitCode << ", status " << exitStatus << std::endl;
-    qApp->exit(exitCode);
+
+    if (log != nullptr) {
+        log->moveCursor(QTextCursor::End);
+        log->insertPlainText("Server closed with code " + QString::number(exitCode) + ", status " + QString::number(exitStatus));
+        log->verticalScrollBar()->setValue(log->verticalScrollBar()->maximum());
+    }
+
+//    qApp->exit(exitCode);
 }

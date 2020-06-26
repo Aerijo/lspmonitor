@@ -30,57 +30,44 @@ int main(int argc, char** argv) {
     QCoreApplication::setApplicationName("lspmonitor");
     QCoreApplication::setApplicationVersion("0.0.0");
 
-    QApplication *gui = qobject_cast<QApplication*>(app.data());
+    QCommandLineParser parser {};
+    parser.setApplicationDescription("Tools to monitor and interact with LSP servers and clients");
+    parser.addHelpOption();
+    parser.addVersionOption();
 
-//    if (gui != nullptr) {
-//        // TODO
-//        std::cerr << "Is GUI app" << std::endl;
+    QCommandLineOption guiOpt ( "gui", "Launch an untied GUI instance to monitor the communications" );
+    parser.addOption(guiOpt);
 
-//        CommLog *log = new CommLog(nullptr);
+    parser.process(*app->instance());
 
-//        log->show();
+    QStringList args = parser.positionalArguments();
+    if (args.size() < 1) {
+        std::cerr << "No server path given, exiting" << std::endl;
+        return -1;
+    }
 
-//        qApp->exec();
-//    } else {
+    CommLog *log = new CommLog(nullptr);
+    log->show();
 
+    QString target = args[0];
+    std::cerr << "opening target: " << target.toStdString() << std::endl;
 
-        QCommandLineParser parser {};
-        parser.setApplicationDescription("Tools to monitor and interact with LSP servers and clients");
-        parser.addHelpOption();
-        parser.addVersionOption();
+    QProcess *serverProcess = new QProcess(app.data());
+    serverProcess->setProgram(target);
+    serverProcess->setArguments(args.mid(1, args.size() - 2));
+    serverProcess->start();
 
-        QCommandLineOption guiOpt ( "gui", "Launch an untied GUI instance to monitor the communications" );
-        parser.addOption(guiOpt);
+    std::cerr << "started target" << std::endl;
 
-        parser.process(*app->instance());
+    StdioMitm *mitm = new StdioMitm(nullptr);
+    mitm->setServer(serverProcess);
+    mitm->setLog(log);
 
-        QStringList args = parser.positionalArguments();
-        if (args.size() < 1) {
-            std::cerr << "No server path given, exiting" << std::endl;
-            return -1;
-        }
+    QObject::connect(serverProcess, &QProcess::readyReadStandardOutput, mitm, &StdioMitm::onServerStdout); // server stdout -> stdout
+    QObject::connect(serverProcess, &QProcess::readyReadStandardError, mitm, &StdioMitm::onServerStderr);
+    QObject::connect(serverProcess, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished), mitm, &StdioMitm::onServerFinish);
 
-        CommLog *log = new CommLog(nullptr);
-        log->show();
+    mitm->startPollingStdin();
 
-        QString target = args[args.size() - 1];
-        std::cerr << "opening target: " << target.toStdString() << std::endl;
-
-        QProcess *serverProcess = new QProcess(app.data());
-        serverProcess->setProgram(target);
-        serverProcess->start();
-
-        std::cerr << "started target" << std::endl;
-
-        StdioMitm *mitm = new StdioMitm(nullptr);
-        mitm->setServer(serverProcess);
-        mitm->setLog(log);
-
-        QObject::connect(serverProcess, &QProcess::readyReadStandardOutput, mitm, &StdioMitm::onServerStdout); // server stdout -> stdout
-        QObject::connect(serverProcess, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished), mitm, &StdioMitm::onServerFinish);
-
-        mitm->startPollingStdin();
-
-        return app->exec();
-//    }
+    return app->exec();
 }

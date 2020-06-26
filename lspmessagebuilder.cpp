@@ -1,6 +1,17 @@
 #include "lspmessagebuilder.h"
 #include <iostream>
 
+QString lspEntityToQString(LspEntity entity) {
+    switch (entity) {
+    case LspEntity::Client:
+        return "Client";
+    case LspEntity::Server:
+        return "Server";
+    default:
+        return "Unknown";
+    }
+}
+
 void LspMessageBuilder::append(QByteArray *data) {
     for (char c : *data) {
         switch (state) {
@@ -19,8 +30,6 @@ void LspMessageBuilder::append(QByteArray *data) {
                     pendingPayload += 1;
 
                     QString raw = QString::fromStdString(buffer.toStdString());
-
-                    std::cerr << "Header: " << raw.toStdString() << std::endl;
 
                     buffer.clear();
 
@@ -63,7 +72,7 @@ void LspMessageBuilder::append(QByteArray *data) {
             if (pendingPayload == 0) {
                 // TODO: Handle parse error
                 QJsonDocument payload = QJsonDocument::fromJson(buffer);
-                LspMessage *msg = new LspMessage {headers, payload};
+                LspMessage *msg = new LspMessage {source, headers, payload};
                 emit emitLspMessage(msg);
 
                 buffer.clear();
