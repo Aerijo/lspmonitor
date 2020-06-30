@@ -3,10 +3,11 @@
 
 #include <QObject>
 #include <QProcess>
+#include <QTimer>
 
-#include "stdinthread.h"
-#include "commlog.h"
+#include "connectionstream.h"
 #include "lspmessagebuilder.h"
+#include "msglogmodel.h"
 
 class StdioMitm : public QObject
 {
@@ -16,12 +17,13 @@ public:
 
     void setServer(QProcess *server);
 
-    void setLog(CommLog *log);
-
     void startPollingStdin();
 
+    MsgLogModel messages;
+
+
 public slots:
-    void onStdin(QByteArray *data);
+    void onStdin(QByteArray data);
 
     void onServerStdout();
 
@@ -31,18 +33,23 @@ public slots:
 
     void onLspMessage(LspMessage *msg);
 
+    void onDebounceEnd();
+
+
 private:
     QProcess *server;
 
-    StdinThread *stdinThread;
-
-    CommLog *log;
+    InputStream *input;
 
     LspMessageBuilder clientBuilder { LspEntity::Client };
 
     LspMessageBuilder serverBuilder { LspEntity::Server };
 
-    QVector<LspMessage*> messages {};
+    QVector<LspMessage*> buffer {};
+
+    QTimer debouncer {};
+
+    bool debouncing = false;
 };
 
 #endif // STDIOMITM_H

@@ -6,27 +6,27 @@
 #include <string>
 #include <QProcess>
 #include <QThread>
+#include <QStandardItemModel>
+#include <QListView>
+#include <QItemSelectionModel>
 
-#include "stdinthread.h"
+#include <QStringListModel>
+#include <QStyledItemDelegate>
+#include <QScrollBar>
+
+#include "connectionstream.h"
 #include "stdiomitm.h"
-#include "commlog.h"
+#include "msglogmodel.h"
 
 QCoreApplication* createApplication(int &argc, char *argv[])
 {
     return new QApplication(argc, argv);
-
-
-//    for (int i = 1; i < argc; ++i) {
-//        if (!qstrcmp(argv[i], "--gui")) {
-//            return new QApplication(argc, argv);
-//        }
-//    }
-
-//    return new QCoreApplication(argc, argv);
 }
 
 int main(int argc, char** argv) {
-    QScopedPointer<QCoreApplication> app(createApplication(argc, argv));
+    std::ios_base::sync_with_stdio(false);
+
+    QApplication* app = new QApplication(argc, argv);
     QCoreApplication::setApplicationName("lspmonitor");
     QCoreApplication::setApplicationVersion("0.0.0");
 
@@ -46,13 +46,10 @@ int main(int argc, char** argv) {
         return -1;
     }
 
-    CommLog *log = new CommLog(nullptr);
-    log->show();
-
     QString target = args[0];
     std::cerr << "opening target: " << target.toStdString() << std::endl;
 
-    QProcess *serverProcess = new QProcess(app.data());
+    QProcess *serverProcess = new QProcess(app);
     serverProcess->setProgram(target);
     serverProcess->setArguments(args.mid(1, args.size() - 2));
     serverProcess->start();
@@ -61,13 +58,28 @@ int main(int argc, char** argv) {
 
     StdioMitm *mitm = new StdioMitm(nullptr);
     mitm->setServer(serverProcess);
-    mitm->setLog(log);
 
     QObject::connect(serverProcess, &QProcess::readyReadStandardOutput, mitm, &StdioMitm::onServerStdout); // server stdout -> stdout
     QObject::connect(serverProcess, &QProcess::readyReadStandardError, mitm, &StdioMitm::onServerStderr);
     QObject::connect(serverProcess, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished), mitm, &StdioMitm::onServerFinish);
 
+    qDebug() << "Hah";
+
     mitm->startPollingStdin();
+
+    qDebug() << "Hmm";
+
+    QListView *view = new QListView;
+    view->setModel(&mitm->messages);
+    view->setVerticalScrollMode(QAbstractItemView::ScrollPerPixel);
+    view->verticalScrollBar()->setSingleStep(25);
+
+    MsgLogDelegate *del = new MsgLogDelegate();
+    view->setItemDelegate(del);
+    view->setAutoScroll(false);
+    view->setEditTriggers(QAbstractItemView::NoEditTriggers);
+    view->show();
+
 
     return app->exec();
 }

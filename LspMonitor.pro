@@ -3,18 +3,26 @@ TARGET = lspmonitor
 
 QT = core gui widgets
 
+CONFIG += c++20
+
 SOURCES += \
-    commlog.cpp \
+    connectionstream.cpp \
+    framebuilder.cpp \
     lspmessagebuilder.cpp \
+    lspschemavalidator.cpp \
     main.cpp \
-    stdinthread.cpp \
+    msglogmodel.cpp \
     stdiomitm.cpp
 
 HEADERS += \
-    commlog.h \
+    connectionstream.h \
+    framebuilder.h \
     lspmessagebuilder.h \
-    stdinthread.h \
+    lspschemavalidator.h \
+    msglogmodel.h \
     stdiomitm.h
+
+FORMS +=
 
 
 

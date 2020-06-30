@@ -12,8 +12,8 @@ QString lspEntityToQString(LspEntity entity) {
     }
 }
 
-void LspMessageBuilder::append(QByteArray *data) {
-    for (char c : *data) {
+void LspMessageBuilder::append(QByteArray data) {
+    for (char c : data) {
         switch (state) {
         case LspMsgBuilderState::Headers:
             switch (c) {
@@ -72,6 +72,7 @@ void LspMessageBuilder::append(QByteArray *data) {
             if (pendingPayload == 0) {
                 // TODO: Handle parse error
                 QJsonDocument payload = QJsonDocument::fromJson(buffer);
+
                 LspMessage *msg = new LspMessage {source, headers, payload};
                 emit emitLspMessage(msg);
 

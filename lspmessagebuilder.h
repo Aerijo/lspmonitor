@@ -16,6 +16,13 @@ enum class LspEntity {
     Server,
 };
 
+enum class LspMessageKind {
+    Notification,
+    Request,
+    Response,
+    Unknown,
+};
+
 QString lspEntityToQString(LspEntity entity);
 
 struct LspHeader {
@@ -48,6 +55,14 @@ struct LspMessage {
 
     QJsonDocument message;
 
+    LspMessage() = default;
+
+    ~LspMessage() = default;
+
+    LspMessage(const LspMessage &other) = default;
+
+    LspMessage &operator=(const LspMessage &) = default;
+
     LspMessage(LspEntity sender, QList<LspHeader> headers, QJsonDocument message) : LspMessage(QDateTime::currentMSecsSinceEpoch(), sender, headers, message) {}
 
     LspMessage(qint64 timestamp, LspEntity sender, QList<LspHeader> headers, QJsonDocument message) : message(message) {
@@ -60,6 +75,10 @@ struct LspMessage {
     }
 };
 
+Q_DECLARE_METATYPE(LspMessage)
+
+
+
 
 /**
  * Takes a stream of characters, emits well formed LSP messages or errors
@@ -71,7 +90,7 @@ class LspMessageBuilder : public QObject
 public:
     LspMessageBuilder(LspEntity source, QObject *parent = nullptr) : QObject(parent), source(source) {}
 
-    void append(QByteArray *data);
+    void append(QByteArray data);
 
 signals:
     void emitLspMessage(LspMessage *msg);
@@ -86,6 +105,7 @@ private:
     QList<LspHeader> headers {};
 
     QByteArray buffer {};
+
 };
 
 #endif // LSPMESSAGEBUILDER_H
