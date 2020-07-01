@@ -6,32 +6,49 @@
 #include <QTimer>
 
 #include "connectionstream.h"
-#include "lspmessagebuilder.h"
+//#include "lspmessagebuilder.h"
 #include "msglogmodel.h"
+#include "framebuilder.h"
+#include "messagebuilder.h"
+#include "lspschemavalidator.h"
 
 class StdioMitm : public QObject
 {
     Q_OBJECT
 public:
-    explicit StdioMitm(QObject *parent = nullptr);
+    explicit StdioMitm(QProcess *server, QObject *parent = nullptr);
 
-    void setServer(QProcess *server);
+    void start();
 
-    void startPollingStdin();
-
-    MsgLogModel messages;
+//    MsgLogModel messages;
 
 
 public slots:
-    void onStdin(QByteArray data);
+    void onClientIn(QByteArray data);
 
-    void onServerStdout();
+    void onServerIn(QByteArray data);
+
+    void onClientFrame(FrameBuilder::Frame frame);
+
+    void onServerFrame(FrameBuilder::Frame frame);
+
+    void onClientFrameError(FrameBuilder::StreamError error);
+
+    void onServerFrameError(FrameBuilder::StreamError error);
+
+    void onClientMessage(MessageBuilder::Message message);
+
+    void onServerMessage(MessageBuilder::Message message);
+
+    void onClientLspMessage(std::shared_ptr<Lsp::LspMessage> message);
+
+    void onServerLspMessage(std::shared_ptr<Lsp::LspMessage> message);
 
     void onServerStderr();
 
     void onServerFinish(int exitCode, QProcess::ExitStatus exitStatus);
 
-    void onLspMessage(LspMessage *msg);
+//    void onLspMessage(LspMessage *msg);
 
     void onDebounceEnd();
 
@@ -39,13 +56,31 @@ public slots:
 private:
     QProcess *server;
 
-    InputStream *input;
+    InputStream *clientIn;
 
-    LspMessageBuilder clientBuilder { LspEntity::Client };
+    OutputStream *clientOut;
 
-    LspMessageBuilder serverBuilder { LspEntity::Server };
+    InputStream *serverIn;
 
-    QVector<LspMessage*> buffer {};
+    OutputStream *serverOut;
+
+    FrameBuilder::FrameBuilder clientFrames;
+
+    FrameBuilder::FrameBuilder serverFrames;
+
+    MessageBuilder::MessageBuilder clientMessages;
+
+    MessageBuilder::MessageBuilder serverMessages;
+
+    Lsp::LspSchemaValidator clientValidator;
+
+    Lsp::LspSchemaValidator serverValidator;
+
+//    LspMessageBuilder clientBuilder { LspEntity::Client };
+
+//    LspMessageBuilder serverBuilder { LspEntity::Server };
+
+//    QVector<LspMessage*> buffer {};
 
     QTimer debouncer {};
 

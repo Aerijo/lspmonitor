@@ -5,68 +5,111 @@
 #include <QScrollBar>
 #include <iostream>
 
-StdioMitm::StdioMitm(QObject *parent) : QObject(parent)
-{
+StdioMitm::StdioMitm(QProcess *server, QObject *parent) : QObject(parent), server(server) {
     debouncer.setSingleShot(true);
-    input = new StdinStream(this);
 
-    QObject::connect(input, &InputStream::emitInput, this, &StdioMitm::onStdin);
+    clientIn = new StdinStream(this);
+    clientOut = new StdoutStream(this);
 
-    QObject::connect(&clientBuilder, &LspMessageBuilder::emitLspMessage, this, &StdioMitm::onLspMessage);
-    QObject::connect(&serverBuilder, &LspMessageBuilder::emitLspMessage, this, &StdioMitm::onLspMessage);
+    serverIn = new ProcessStdinStream(server, this);
+    serverOut = new ProcessStdoutStream(server, this);
 
-    QObject::connect(&debouncer, &QTimer::timeout, this, &StdioMitm::onDebounceEnd);
+    connect(clientIn, &InputStream::emitInput, &clientFrames, &FrameBuilder::FrameBuilder::onInput);
+    connect(serverIn, &InputStream::emitInput, &serverFrames, &FrameBuilder::FrameBuilder::onInput);
+
+    connect(clientIn, &InputStream::emitInput, serverOut, &OutputStream::onOutput);
+    connect(serverIn, &InputStream::emitInput, clientOut, &OutputStream::onOutput);
+
+    connect(&clientFrames, &FrameBuilder::FrameBuilder::emitError, this, &StdioMitm::onClientFrameError);
+    connect(&serverFrames, &FrameBuilder::FrameBuilder::emitError, this, &StdioMitm::onServerFrameError);
+
+    connect(&clientFrames, &FrameBuilder::FrameBuilder::emitFrame, &clientMessages, &MessageBuilder::MessageBuilder::onFrame);
+    connect(&serverFrames, &FrameBuilder::FrameBuilder::emitFrame, &serverMessages, &MessageBuilder::MessageBuilder::onFrame);
+
+    connect(&clientMessages, &MessageBuilder::MessageBuilder::emitMessage, &clientValidator, &Lsp::LspSchemaValidator::onMessage);
+    connect(&serverMessages, &MessageBuilder::MessageBuilder::emitMessage, &serverValidator, &Lsp::LspSchemaValidator::onMessage);
+
+    connect(&clientValidator, &Lsp::LspSchemaValidator::emitLspMessage, this, &StdioMitm::onClientLspMessage);
+    connect(&serverValidator, &Lsp::LspSchemaValidator::emitLspMessage, this, &StdioMitm::onServerLspMessage);
+
+    connect(server, &QProcess::readyReadStandardError, this, &StdioMitm::onServerStderr);
+    connect(server, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished), this, &StdioMitm::onServerFinish);
+
+//    connect(&clientBuilder, &LspMessageBuilder::emitLspMessage, this, &StdioMitm::onLspMessage);
+//    connect(&serverBuilder, &LspMessageBuilder::emitLspMessage, this, &StdioMitm::onLspMessage);
+
+    connect(&debouncer, &QTimer::timeout, this, &StdioMitm::onDebounceEnd);
 }
 
 void StdioMitm::onDebounceEnd() {
     debouncing = false;
-    if (!buffer.isEmpty()) {
-        messages.append(buffer);
-        buffer.clear();
-    }
+//    if (!buffer.isEmpty()) {
+//        messages.append(buffer);
+//        buffer.clear();
+//    }
 }
 
-void StdioMitm::startPollingStdin() {
-    input->start();
+void StdioMitm::start() {
+    clientIn->start();
+    serverIn->start();
 }
 
-void StdioMitm::setServer(QProcess *server) {
-    this->server = server;
+void StdioMitm::onClientIn(QByteArray data) {
+//    clientBuilder.append(data);
+    serverOut->onOutput(data);
 }
 
-void StdioMitm::onStdin(QByteArray data) {
-    qDebug() << "got data";
-
-    server->write(data);
-    clientBuilder.append(data);
-}
-
-void StdioMitm::onServerStdout() {
-    QByteArray buff = server->readAllStandardOutput();
-
-    serverBuilder.append(buff);
-
-    std::cout.write(buff, buff.size()).flush();
+void StdioMitm::onServerIn(QByteArray buff) {
+//    serverBuilder.append(buff);
+    clientOut->onOutput(buff);
 }
 
 void StdioMitm::onServerStderr() {
     QByteArray buff = server->readAllStandardError();
-
     std::cerr << buff.toStdString() << std::endl;
 }
 
-void StdioMitm::onLspMessage(LspMessage *msg) {
-    qDebug() << "received " << lspEntityToQString(msg->sender) << " msg";
+//void StdioMitm::onLspMessage(LspMessage *msg) {
+//    if (debouncing) {
+//        buffer.append(msg);
+//    } else {
+//        QVector<LspMessage*> m { msg } ;
+//        messages.append(m);
+//        debouncing = true;
+//        debouncer.start(100);
+//    }
+//}
 
-    if (debouncing) {
-        buffer.append(msg);
-    } else {
-        QVector<LspMessage*> m { msg } ;
-        messages.append(m);
+void StdioMitm::onClientFrame(FrameBuilder::Frame frame) {
+    qDebug() << "got client frame";
+}
 
-        debouncing = true;
-        debouncer.start(100);
-    }
+void StdioMitm::onServerFrame(FrameBuilder::Frame frame) {
+    qDebug() << "got server frame";
+}
+
+void StdioMitm::onClientFrameError(FrameBuilder::StreamError error) {
+    qDebug() << "got client frame error: " + error.toQString();
+}
+
+void StdioMitm::onServerFrameError(FrameBuilder::StreamError error) {
+    qDebug() << "got server frame error: " + error.toQString();
+}
+
+void StdioMitm::onClientMessage(MessageBuilder::Message message) {
+    qDebug() << "got client message";
+}
+
+void StdioMitm::onServerMessage(MessageBuilder::Message message) {
+    qDebug() << "got server message";
+}
+
+void StdioMitm::onClientLspMessage(std::shared_ptr<Lsp::LspMessage> message) {
+    qDebug() << "got client lsp message";
+}
+
+void StdioMitm::onServerLspMessage(std::shared_ptr<Lsp::LspMessage> message) {
+    qDebug() << "got server lsp message";
 }
 
 void StdioMitm::onServerFinish(int exitCode, QProcess::ExitStatus exitStatus) {

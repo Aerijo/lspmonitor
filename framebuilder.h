@@ -1,5 +1,5 @@
-#ifndef MESSAGEBUILDER_H
-#define MESSAGEBUILDER_H
+#ifndef FRAMEBUILDER_H
+#define FRAMEBUILDER_H
 
 #include <QtCore>
 
@@ -22,6 +22,9 @@ struct Header {
  * Represents a whole message extracted from the stream
  */
 struct Frame {
+    /** The time this frame was fully received */
+    qint64 timestamp;
+
     /** The index into the stream this frame starts on (index of first header character) */
     size_t frameStart;
 
@@ -32,7 +35,7 @@ struct Frame {
     size_t payloadStart;
 
     /** The headers of the message, in order. May contain duplicates. */
-    QList<Header> headers;
+    QVector<Header> headers;
 
     /** The full payload of the message, as specified by the Content-Length header */
     QByteArray payload;
@@ -40,7 +43,7 @@ struct Frame {
     /** If the message was built in recovery mode */
     bool fromRecoveryMode;
 
-    Frame(size_t frameStart, size_t frameEnd, size_t payloadStart, QList<Header> headers, QByteArray payload, bool recovery=false);
+    Frame(qint64 timestamp, size_t frameStart, size_t frameEnd, size_t payloadStart, QVector<Header> headers, QByteArray payload, bool recovery=false);
 };
 
 struct StreamError {
@@ -58,9 +61,6 @@ struct StreamError {
         /** There is no Content-Length header */
         MissingContentLength,
 
-        /** The stream should have headers, but there is a parse error */
-        HeadersParseError,
-
         /** The Content-Length header value is not an integer */
         ContentLengthNaN,
 
@@ -75,6 +75,10 @@ struct StreamError {
     } kind;
 
     StreamError(size_t globalOffset, size_t localOffset, Kind kind);
+
+    static QString kindToQString(Kind kind);
+
+    QString toQString();
 };
 
 /**
@@ -97,6 +101,9 @@ signals:
 
     /** Fired whenever an error occurs. The builder will try to find the next valid message */
     void emitError(StreamError error);
+
+public slots:
+    void onInput(QByteArray input);
 
 private:
     enum class State {
@@ -122,7 +129,7 @@ private:
 
     QByteArray buffer;
 
-    QList<Header> headers;
+    QVector<Header> headers;
 
     QString headerName;
 
@@ -143,4 +150,4 @@ private:
 
 }
 
-#endif // MESSAGEBUILDER_H
+#endif // FRAMEBUILDER_H

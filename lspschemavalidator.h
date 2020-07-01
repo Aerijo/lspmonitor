@@ -4,20 +4,19 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 
-#ifdef __cpp_lib_optional
-#include <optional>
-template <typename T>
-using option = std::optional<T>;
-#else
-#include <experimental/optional>
-template <typename T>
-using option = std::experimental::optional<T>;
-#endif
+#include <map>
+
+#include "option.h"
+#include "messagebuilder.h"
 
 
 
 namespace Lsp {
 
+/**
+ * Represents an LSP version. Used for cases like "introduced in version",
+ * or "deprecated in version", etc.
+ */
 struct Version {
     int major;
     int minor;
@@ -33,6 +32,8 @@ class Uri {
  * but URI structure expected.
  */
 class DocumentUri {
+    QString raw;
+
 
 };
 
@@ -560,74 +561,144 @@ private:
 };
 
 
-enum class SchemaIssueSeverity {
-    Error = 1,
-    Warning = 2,
-};
 
 struct SchemaIssue {
-    SchemaIssueSeverity severity;
+    enum class Severity {
+        Error = 1,
+        Warning = 2,
+        Info = 3,
+    } severity;
+
     QString message;
 
     static SchemaIssue error(QString msg);
-    static SchemaIssue error(QJsonValue* location, QString msg);
 
-    SchemaIssue(SchemaIssueSeverity severity, QString message);
-    SchemaIssue(QJsonValue* location, SchemaIssueSeverity severity, QString message);
-};
-
-class ParsedMessage {
-public:
-    ParsedMessage();
-    ParsedMessage(Message* message);
-    ParsedMessage(Message* message, SchemaIssue issue);
-    ParsedMessage(Message* message, QVector<SchemaIssue> issues);
-
-private:
-    Message* message;
-    QVector<SchemaIssue> issues;
+    SchemaIssue(Severity severity, QString message);
 };
 
 /**
  * JSON like tree structure that is a subset of the message, with
  * entries nesting to reach all schema issues
  */
-class SchemaValue {
+class SchemaJson {
+public:
     QVector<SchemaIssue> localIssues;
-};
 
-class SchemaObject : public SchemaValue {
-    QMap<QString, SchemaValue> properties;
-};
+    bool isObject() { return kind == Kind::Object; }
 
-class SchemaArray : public SchemaValue {
-    QVector<SchemaValue> values;
-};
+    bool isArray() { return kind == Kind::Array; };
 
-struct MessageParseResult {
-    MessageKind kind;
+    void error(QString msg);
 
+    void keyError(QString key, QString msg);
 
+    void intoObject();
+
+    void intoArray();
+
+    SchemaJson prop(QString key);
+
+    static SchemaJson makeObject();
+
+    static SchemaJson makeArray();
+
+    static SchemaJson makeValue();
+
+    SchemaJson();
+
+    SchemaJson(const SchemaJson&);
+
+    ~SchemaJson();
+
+private:
+    enum class Kind {
+        Object,
+        Array,
+        Value,
+    } kind;
+
+    union {
+        std::map<QString, std::pair<QVector<SchemaIssue>, SchemaJson>> mapProperties;
+        QVector<SchemaJson> arrayValues;
+    };
+
+    SchemaJson(Kind kind);
 };
 
 /**
- * Custom schame validator to detect nonconformance with the LSP
- * specification.
- *
- * There are varying kinds of nonconformance, including
- * - Invalid message kind: it is not a notification, request, or response
- * - Additional property: a property that is not part of the messages schema
- * - Missing property: a property that must be present
- * - Conflicting property: a property that is superceeded by another one
- * - Incorrect type: the property value type is incorrect
+ * Represents a JSON document, annotated with JSON-RPC / LSP specific
+ * information such as message kind, schema violations, etc.
  */
-//class LspSchemaParser
-//{
-//public:
-//    LspSchemaParser();
+struct LspMessage {
+    /** Which entity sent the message */
+    enum class Sender {
+        Client,
+        Server,
+    } sender;
 
-//    parse();
-//};
+    /** What kind of JSON-RPC message this is */
+    enum class Kind {
+        /** The message is a Notification (no acknowlegement required) */
+        Notification,
+
+        /** The message is a request (expects a response) */
+        Request,
+
+        /** The message is a response (matches with previous request) */
+        Response,
+
+        /** The message is a list of messages send in a single array */
+        Batch, // TODO: Support this. For now, just split into individual messages
+
+        /** The message does not conform to the set of known kinds */
+        Unknown,
+    } kind;
+
+    /** Any issues with the message */
+    SchemaJson issues;
+
+    /** The time the message completed arriving */
+    qint64 timestamp;
+
+    /** The JSON representation of the message */
+    QJsonDocument contents;
+
+    LspMessage(MessageBuilder::Message msg);
+
+    LspMessage(Kind kind, SchemaJson issues, MessageBuilder::Message msg);
+
+    LspMessage(const LspMessage&) = delete;
+
+};
+
+
+/**
+ * Takes in Messages and validates them against the LSP spec,
+ * annotating them with as much information as possible, such as
+ * message type (notification, request, response), schema errors,
+ * minimum / maximum LSP version of message, etc.
+ *
+ * A validator is stateful; it tracks the capabilities, request response IDs,
+ * etc.
+ */
+class LspSchemaValidator : public QObject {
+    Q_OBJECT
+
+public:
+    LspSchemaValidator(QObject* parent = nullptr);
+
+signals:
+    void emitLspMessage(std::shared_ptr<LspMessage> message);
+
+public slots:
+    void onMessage(MessageBuilder::Message message);
+
+private:
+    void onMessageBatch(MessageBuilder::Message message, QJsonArray batch);
+
+    void onMessageObject(MessageBuilder::Message message, QJsonObject contents);
+
+};
 
 }
 

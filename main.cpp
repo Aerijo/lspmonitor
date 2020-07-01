@@ -16,7 +16,7 @@
 
 #include "connectionstream.h"
 #include "stdiomitm.h"
-#include "msglogmodel.h"
+//#include "msglogmodel.h"
 
 QCoreApplication* createApplication(int &argc, char *argv[])
 {
@@ -24,7 +24,9 @@ QCoreApplication* createApplication(int &argc, char *argv[])
 }
 
 int main(int argc, char** argv) {
-    std::ios_base::sync_with_stdio(false);
+    // Currently causing bugs when enabled
+    // std::ios_base::sync_with_stdio(false);
+    std::cin.tie(nullptr);
 
     QApplication* app = new QApplication(argc, argv);
     QCoreApplication::setApplicationName("lspmonitor");
@@ -56,30 +58,20 @@ int main(int argc, char** argv) {
 
     std::cerr << "started target" << std::endl;
 
-    StdioMitm *mitm = new StdioMitm(nullptr);
-    mitm->setServer(serverProcess);
+    StdioMitm *mitm = new StdioMitm(serverProcess, nullptr);
 
-    QObject::connect(serverProcess, &QProcess::readyReadStandardOutput, mitm, &StdioMitm::onServerStdout); // server stdout -> stdout
-    QObject::connect(serverProcess, &QProcess::readyReadStandardError, mitm, &StdioMitm::onServerStderr);
-    QObject::connect(serverProcess, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished), mitm, &StdioMitm::onServerFinish);
-
-    qDebug() << "Hah";
-
-    mitm->startPollingStdin();
-
-    qDebug() << "Hmm";
+    mitm->start();
 
     QListView *view = new QListView;
-    view->setModel(&mitm->messages);
-    view->setVerticalScrollMode(QAbstractItemView::ScrollPerPixel);
-    view->verticalScrollBar()->setSingleStep(25);
+//    view->setModel(&mitm->messages);
+//    view->setVerticalScrollMode(QAbstractItemView::ScrollPerPixel);
+//    view->verticalScrollBar()->setSingleStep(25);
 
-    MsgLogDelegate *del = new MsgLogDelegate();
-    view->setItemDelegate(del);
+//    MsgLogDelegate *del = new MsgLogDelegate();
+//    view->setItemDelegate(del);
     view->setAutoScroll(false);
     view->setEditTriggers(QAbstractItemView::NoEditTriggers);
     view->show();
-
 
     return app->exec();
 }

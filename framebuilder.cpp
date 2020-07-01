@@ -1,17 +1,39 @@
 #include "framebuilder.h"
+#include "asciiparsing.h"
 
 namespace FrameBuilder {
 
 Header::Header(QString name, QString value) : name(name), value(value) {}
 
-Frame::Frame(size_t gStart, size_t gEnd, size_t pOff, QList<Header> headers, QByteArray payload, bool recovery) : frameStart(gStart), frameEnd(gEnd), payloadStart(pOff), headers(headers), payload(payload), fromRecoveryMode(recovery) {}
+Frame::Frame(qint64 timestamp, size_t gStart, size_t gEnd, size_t pOff, QVector<Header> headers, QByteArray payload, bool recovery) : timestamp(timestamp), frameStart(gStart), frameEnd(gEnd), payloadStart(pOff), headers(headers), payload(payload), fromRecoveryMode(recovery) {}
 
 StreamError::StreamError(size_t gOffset, size_t lOffset, Kind kind) : globalOffset(gOffset), localOffset(lOffset), kind(kind) {}
 
+QString StreamError::kindToQString(Kind kind) {
+    switch (kind) {
+        case Kind::ContentLengthNaN:
+            return "Content-Length header value is not a number";
+        case Kind::MissingHeaderName:
+            return "Header field missing name";
+        case Kind::UnexpectedCharacter:
+            return "Unexpected character in stream";
+        case Kind::MissingContentLength:
+            return "Missing Content-Length header";
+        case Kind::ContentLengthNegative:
+            return "Content-Length value is negative";
+        case Kind::MultipleContentLength:
+            return "Content-Length is defined multiple times";
+    }
+}
+
+QString StreamError::toQString() {
+    return kindToQString(kind);
+}
+
 FrameBuilder::FrameBuilder(QObject* parent) : QObject(parent) {}
 
-void FrameBuilder::operator<<(const QByteArray &data) {
-    for (char c : data) {
+void FrameBuilder::onInput(QByteArray input) {
+    for (char c : input) {
         switch (state) {
             case State::Headers:
                 appendHeader(c);
@@ -25,53 +47,12 @@ void FrameBuilder::operator<<(const QByteArray &data) {
     }
 }
 
+void FrameBuilder::operator<<(const QByteArray &data) {
+    onInput(data);
+}
+
 void FrameBuilder::operator<<(char c) {
-    switch (state) {
-        case State::Headers:
-            appendHeader(c);
-            break;
-        case State::Payload:
-            appendPayload(c);
-            break;
-    }
-
-    offset += 1;
-}
-
-bool isVchar(char c) {
-    return 0x21 <= c && c <= 0x7E;
-}
-
-bool isDelim(char c) {
-    switch (c) {
-        case '(':
-        case ')':
-        case ',':
-        case '/':
-        case ':':
-        case ';':
-        case '<':
-        case '=':
-        case '>':
-        case '?':
-        case '@':
-        case '[':
-        case '\\':
-        case ']':
-        case '{':
-        case '}':
-            return true;
-        default:
-            return false;
-    }
-}
-
-bool isHorizontalWhitespace(char c) {
-    return c == ' ' || c == '\t';
-}
-
-bool isTchar(char c) {
-    return isVchar(c) && !isDelim(c);
+    onInput(QByteArray().append(c));
 }
 
 void FrameBuilder::appendHeader(char c) {
@@ -158,11 +139,13 @@ void FrameBuilder::appendPayload(char c) {
 }
 
 void FrameBuilder::emitPayload() {
-    emit emitFrame(Frame (frameStart, offset, offset - buffer.size(), headers, buffer, recoveryState == 0));
+    emit emitFrame(Frame (QDateTime::currentMSecsSinceEpoch(), frameStart, offset, offset - buffer.size(), headers, buffer, recoveryState == 0));
 
     frameStart = offset;
 
     state = State::Headers;
+    headersState = HeadersState::NameStart;
+    headers.clear();
 
     if (recoveryState > 0) {
         recoveryState -= 1;
@@ -212,6 +195,8 @@ void FrameBuilder::handleError(StreamError::Kind kind) {
     frameStart = offset;
     headers.clear();
     state = State::Headers;
+    headersState = HeadersState::NameStart;
+    recoveryState += 1;
 }
 
 }
