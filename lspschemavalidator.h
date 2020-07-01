@@ -596,7 +596,7 @@ public:
 
     void intoArray();
 
-    SchemaJson prop(QString key);
+    SchemaJson member(QString key);
 
     static SchemaJson makeObject();
 
