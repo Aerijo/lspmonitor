@@ -1,0 +1,20 @@
+<RCC>
+    <qresource prefix="/icons">
+        <file>resources/bell-solid.svg</file>
+        <file>resources/bell.svg</file>
+        <file>resources/bug-solid.svg</file>
+        <file>resources/comment-alt.svg</file>
+        <file>resources/comment-dollar.svg</file>
+        <file>resources/comment-dots.svg</file>
+        <file>resources/comment-medical.svg</file>
+        <file>resources/comment-slash.svg</file>
+        <file>resources/comment.svg</file>
+        <file>resources/comments-dollar.svg</file>
+        <file>resources/comments.svg</file>
+        <file>resources/exclamation-circle.svg</file>
+        <file>resources/exclamation-triangle.svg</file>
+        <file>resources/info-circle.svg</file>
+        <file>resources/question-circle-solid.svg</file>
+        <file>resources/reply-solid.svg</file>
+    </qresource>
+</RCC>

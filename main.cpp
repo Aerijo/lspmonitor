@@ -14,14 +14,9 @@
 #include <QStyledItemDelegate>
 #include <QScrollBar>
 
+#include "communicationmodel.h"
 #include "connectionstream.h"
 #include "stdiomitm.h"
-//#include "msglogmodel.h"
-
-QCoreApplication* createApplication(int &argc, char *argv[])
-{
-    return new QApplication(argc, argv);
-}
 
 int main(int argc, char** argv) {
     // Currently causing bugs when enabled
@@ -56,22 +51,24 @@ int main(int argc, char** argv) {
     serverProcess->setArguments(args.mid(1, args.size() - 2));
     serverProcess->start();
 
-    std::cerr << "started target" << std::endl;
-
     StdioMitm *mitm = new StdioMitm(serverProcess, nullptr);
 
     mitm->start();
 
     QListView *view = new QListView;
-//    view->setModel(&mitm->messages);
-//    view->setVerticalScrollMode(QAbstractItemView::ScrollPerPixel);
-//    view->verticalScrollBar()->setSingleStep(25);
+    view->setModel(&mitm->messages);
+    view->setVerticalScrollMode(QAbstractItemView::ScrollPerPixel);
+    view->verticalScrollBar()->setSingleStep(25);
 
-//    MsgLogDelegate *del = new MsgLogDelegate();
-//    view->setItemDelegate(del);
+    CommunicationDelegate *del = new CommunicationDelegate();
+    view->setItemDelegate(del);
     view->setAutoScroll(false);
     view->setEditTriggers(QAbstractItemView::NoEditTriggers);
     view->show();
+
+    bool *atBottom = new bool();
+    QObject::connect(&mitm->messages, &QAbstractListModel::rowsAboutToBeInserted, [=]{ *atBottom = view->verticalScrollBar()->maximum() == view->verticalScrollBar()->value(); });
+    QObject::connect(&mitm->messages, &QAbstractListModel::rowsInserted, view, [=]{ if (*atBottom) { view->scrollToBottom(); } });
 
     return app->exec();
 }

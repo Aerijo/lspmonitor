@@ -6,11 +6,10 @@
 #include <QTimer>
 
 #include "connectionstream.h"
-//#include "lspmessagebuilder.h"
-#include "msglogmodel.h"
 #include "framebuilder.h"
 #include "messagebuilder.h"
 #include "lspschemavalidator.h"
+#include "communicationmodel.h"
 
 class StdioMitm : public QObject
 {
@@ -20,7 +19,7 @@ public:
 
     void start();
 
-//    MsgLogModel messages;
+    CommunicationModel messages {};
 
 
 public slots:
@@ -48,10 +47,6 @@ public slots:
 
     void onServerFinish(int exitCode, QProcess::ExitStatus exitStatus);
 
-//    void onLspMessage(LspMessage *msg);
-
-    void onDebounceEnd();
-
 
 private:
     QProcess *server;
@@ -75,16 +70,6 @@ private:
     Lsp::LspSchemaValidator clientValidator;
 
     Lsp::LspSchemaValidator serverValidator;
-
-//    LspMessageBuilder clientBuilder { LspEntity::Client };
-
-//    LspMessageBuilder serverBuilder { LspEntity::Server };
-
-//    QVector<LspMessage*> buffer {};
-
-    QTimer debouncer {};
-
-    bool debouncing = false;
 };
 
 #endif // STDIOMITM_H

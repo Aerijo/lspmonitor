@@ -7,27 +7,30 @@ CONFIG += c++20
 
 SOURCES += \
     asciiparsing.cpp \
+    communicationmodel.cpp \
     connectionstream.cpp \
     framebuilder.cpp \
     lspmessagebuilder.cpp \
     lspschemavalidator.cpp \
     main.cpp \
     messagebuilder.cpp \
-    msglogmodel.cpp \
     stdiomitm.cpp
 
 HEADERS += \
     asciiparsing.h \
+    communicationmodel.h \
     connectionstream.h \
     framebuilder.h \
     lspmessagebuilder.h \
     lspschemavalidator.h \
     messagebuilder.h \
-    msglogmodel.h \
     option.h \
     stdiomitm.h
 
 FORMS +=
+
+RESOURCES += \
+    resources.qrc
 
 
 

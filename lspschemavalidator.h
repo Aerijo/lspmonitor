@@ -584,9 +584,9 @@ class SchemaJson {
 public:
     QVector<SchemaIssue> localIssues;
 
-    bool isObject() { return kind == Kind::Object; }
+    bool isObject() const { return kind == Kind::Object; }
 
-    bool isArray() { return kind == Kind::Array; };
+    bool isArray() const { return kind == Kind::Array; };
 
     void error(QString msg);
 
@@ -595,6 +595,14 @@ public:
     void intoObject();
 
     void intoArray();
+
+    int issueCount() const;
+
+    int hintCount();
+
+    int warningCount();
+
+    int errorCount();
 
     SchemaJson member(QString key);
 
@@ -608,19 +616,16 @@ public:
 
     SchemaJson(const SchemaJson&);
 
-    ~SchemaJson();
-
 private:
     enum class Kind {
         Object,
         Array,
-        Value,
+        Empty,
     } kind;
 
-    union {
-        std::map<QString, std::pair<QVector<SchemaIssue>, SchemaJson>> mapProperties;
-        QVector<SchemaJson> arrayValues;
-    };
+    // TODO: Make union without segfaulting
+    std::map<QString, std::pair<QVector<SchemaIssue>, SchemaJson>> mapProperties;
+    QVector<SchemaJson> arrayValues;
 
     SchemaJson(Kind kind);
 };
@@ -663,12 +668,11 @@ struct LspMessage {
     /** The JSON representation of the message */
     QJsonDocument contents;
 
+    LspMessage() = default;
+
     LspMessage(MessageBuilder::Message msg);
 
     LspMessage(Kind kind, SchemaJson issues, MessageBuilder::Message msg);
-
-    LspMessage(const LspMessage&) = delete;
-
 };
 
 
@@ -685,7 +689,7 @@ class LspSchemaValidator : public QObject {
     Q_OBJECT
 
 public:
-    LspSchemaValidator(QObject* parent = nullptr);
+    LspSchemaValidator(LspMessage::Sender sender, QObject* parent = nullptr);
 
 signals:
     void emitLspMessage(std::shared_ptr<LspMessage> message);
@@ -698,8 +702,18 @@ private:
 
     void onMessageObject(MessageBuilder::Message message, QJsonObject contents);
 
+    void validateNotification(QString method, option<QJsonDocument> params, SchemaJson& issues);
+
+    void validateRequest(QString method, option<QJsonDocument> params, SchemaJson& issues);
+
+    void validateResponseError(QJsonValue errorMethod, SchemaJson& rootIssues);
+
+    LspMessage::Sender sender;
+
 };
 
 }
+
+Q_DECLARE_METATYPE(Lsp::LspMessage);
 
 #endif // LSPSCHEMAVALIDATOR_H

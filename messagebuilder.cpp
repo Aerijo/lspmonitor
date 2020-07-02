@@ -206,6 +206,7 @@ void MessageBuilder::onFrame(FrameBuilder::Frame frame) {
 
     QJsonParseError error;
 
+    // TODO: Does this detect duplicate object keys? (if not, we need to find them and raise an error on them)
     QJsonDocument doc = QJsonDocument::fromJson(jsonInput, &error);
 
     if (error.error == QJsonParseError::NoError) {

@@ -5,9 +5,7 @@
 #include <QScrollBar>
 #include <iostream>
 
-StdioMitm::StdioMitm(QProcess *server, QObject *parent) : QObject(parent), server(server) {
-    debouncer.setSingleShot(true);
-
+StdioMitm::StdioMitm(QProcess *server, QObject *parent) : QObject(parent), server(server), clientValidator(Lsp::LspMessage::Sender::Client), serverValidator(Lsp::LspMessage::Sender::Server) {
     clientIn = new StdinStream(this);
     clientOut = new StdoutStream(this);
 
@@ -34,19 +32,6 @@ StdioMitm::StdioMitm(QProcess *server, QObject *parent) : QObject(parent), serve
 
     connect(server, &QProcess::readyReadStandardError, this, &StdioMitm::onServerStderr);
     connect(server, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished), this, &StdioMitm::onServerFinish);
-
-//    connect(&clientBuilder, &LspMessageBuilder::emitLspMessage, this, &StdioMitm::onLspMessage);
-//    connect(&serverBuilder, &LspMessageBuilder::emitLspMessage, this, &StdioMitm::onLspMessage);
-
-    connect(&debouncer, &QTimer::timeout, this, &StdioMitm::onDebounceEnd);
-}
-
-void StdioMitm::onDebounceEnd() {
-    debouncing = false;
-//    if (!buffer.isEmpty()) {
-//        messages.append(buffer);
-//        buffer.clear();
-//    }
 }
 
 void StdioMitm::start() {
@@ -55,12 +40,10 @@ void StdioMitm::start() {
 }
 
 void StdioMitm::onClientIn(QByteArray data) {
-//    clientBuilder.append(data);
     serverOut->onOutput(data);
 }
 
 void StdioMitm::onServerIn(QByteArray buff) {
-//    serverBuilder.append(buff);
     clientOut->onOutput(buff);
 }
 
@@ -68,17 +51,6 @@ void StdioMitm::onServerStderr() {
     QByteArray buff = server->readAllStandardError();
     std::cerr << buff.toStdString() << std::endl;
 }
-
-//void StdioMitm::onLspMessage(LspMessage *msg) {
-//    if (debouncing) {
-//        buffer.append(msg);
-//    } else {
-//        QVector<LspMessage*> m { msg } ;
-//        messages.append(m);
-//        debouncing = true;
-//        debouncer.start(100);
-//    }
-//}
 
 void StdioMitm::onClientFrame(FrameBuilder::Frame frame) {
     qDebug() << "got client frame";
@@ -105,11 +77,15 @@ void StdioMitm::onServerMessage(MessageBuilder::Message message) {
 }
 
 void StdioMitm::onClientLspMessage(std::shared_ptr<Lsp::LspMessage> message) {
-    qDebug() << "got client lsp message";
+    qDebug() << "got client lsp message with " + QString::number(message->issues.issueCount()) + " issues";
+
+    messages.append(*message);
 }
 
 void StdioMitm::onServerLspMessage(std::shared_ptr<Lsp::LspMessage> message) {
-    qDebug() << "got server lsp message";
+    qDebug() << "got server lsp message with " + QString::number(message->issues.issueCount()) + " issues";
+
+    messages.append(*message);
 }
 
 void StdioMitm::onServerFinish(int exitCode, QProcess::ExitStatus exitStatus) {
