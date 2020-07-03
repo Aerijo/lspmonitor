@@ -19,7 +19,7 @@ QVariant CommunicationModel::data(const QModelIndex &index, int role) const {
 
     if (role == Qt::DisplayRole) {
         QVariant s;
-        Lsp::LspMessage const &msg = messages[index.row()];
+        std::shared_ptr<Lsp::LspMessage> msg = messages[index.row()];
         s.setValue(msg);
         return s;
     } else {
@@ -27,11 +27,11 @@ QVariant CommunicationModel::data(const QModelIndex &index, int role) const {
     }
 }
 
-void CommunicationModel::append(Lsp::LspMessage msg) {
-    append(QVector<Lsp::LspMessage> { msg });
+void CommunicationModel::append(std::shared_ptr<Lsp::LspMessage> msg) {
+    append(QVector<std::shared_ptr<Lsp::LspMessage>> { msg });
 }
 
-void CommunicationModel::append(QVector<Lsp::LspMessage> msgs) {
+void CommunicationModel::append(QVector<std::shared_ptr<Lsp::LspMessage>> msgs) {
     if (debouncing) {
         debounceBuffer.append(msgs);
         return;

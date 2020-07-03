@@ -32,6 +32,8 @@ StdioMitm::StdioMitm(QProcess *server, QObject *parent) : QObject(parent), serve
 
     connect(server, &QProcess::readyReadStandardError, this, &StdioMitm::onServerStderr);
     connect(server, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished), this, &StdioMitm::onServerFinish);
+
+    clientValidator.linkWith(serverValidator);
 }
 
 void StdioMitm::start() {
@@ -79,13 +81,13 @@ void StdioMitm::onServerMessage(MessageBuilder::Message message) {
 void StdioMitm::onClientLspMessage(std::shared_ptr<Lsp::LspMessage> message) {
     qDebug() << "got client lsp message with " + QString::number(message->issues.issueCount()) + " issues";
 
-    messages.append(*message);
+    messages.append(message);
 }
 
 void StdioMitm::onServerLspMessage(std::shared_ptr<Lsp::LspMessage> message) {
     qDebug() << "got server lsp message with " + QString::number(message->issues.issueCount()) + " issues";
 
-    messages.append(*message);
+    messages.append(message);
 }
 
 void StdioMitm::onServerFinish(int exitCode, QProcess::ExitStatus exitStatus) {

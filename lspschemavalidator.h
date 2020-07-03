@@ -40,8 +40,20 @@ class DocumentUri {
 /**
  * @brief Represents an LSP Id (number or string)
  */
-class Id {
+struct Id {
+    enum class Kind {
+        String,
+        Number,
+    } kind;
 
+    QString stringId {};
+    int numberId {};
+
+    bool isString() { return kind == Kind::String; }
+    bool isNumber() { return kind == Kind::Number; }
+
+    Id(QString id) : kind(Kind::String), stringId(id) {}
+    Id(int id) : kind(Kind::Number), numberId(id) {}
 };
 
 enum class Source {
@@ -560,8 +572,6 @@ private:
     QJsonValue value;
 };
 
-
-
 struct SchemaIssue {
     enum class Severity {
         Error = 1,
@@ -668,11 +678,50 @@ struct LspMessage {
     /** The JSON representation of the message */
     QJsonDocument contents;
 
+    /** The method associated with this message (the method of the Request if a Response) */
+    QString method;
+
+    // TODO: Remove & turn message kinds into sub classes
+    std::shared_ptr<LspMessage> match;
+
     LspMessage() = default;
 
     LspMessage(MessageBuilder::Message msg);
 
     LspMessage(Kind kind, SchemaJson issues, MessageBuilder::Message msg);
+};
+
+/**
+ * Tracks active message ID's, so we can link them to requests and detect
+ * duplicates
+ *
+ * Definitely not thread safe
+ */
+class IdTracker {
+public:
+    IdTracker() = default;
+
+    /** Links the two stores, so that retrievals work on the other one */
+    void linkWith(IdTracker &other);
+
+    /**
+     * Inserts the request into the tracker, returning a pointer to the old message stored
+     * under that ID if it exists.
+     */
+    std::shared_ptr<LspMessage> insert(Id id, std::shared_ptr<LspMessage> msg);
+
+    /**
+     * Returns a pointer to the message stored under that ID if it exists, and
+     * removes the message from the tracker.
+     */
+    std::shared_ptr<LspMessage> retrieve(Id id);
+
+private:
+    QMap<QString, std::shared_ptr<LspMessage>> stringIds {};
+    QMap<int, std::shared_ptr<LspMessage>> numberIds {};
+
+    QMap<QString, std::shared_ptr<LspMessage>>* otherStringIds;
+    QMap<int, std::shared_ptr<LspMessage>>* otherNumberIds;
 };
 
 
@@ -691,6 +740,8 @@ class LspSchemaValidator : public QObject {
 public:
     LspSchemaValidator(LspMessage::Sender sender, QObject* parent = nullptr);
 
+    void linkWith(LspSchemaValidator &other);
+
 signals:
     void emitLspMessage(std::shared_ptr<LspMessage> message);
 
@@ -704,16 +755,22 @@ private:
 
     void validateNotification(QString method, option<QJsonDocument> params, SchemaJson& issues);
 
-    void validateRequest(QString method, option<QJsonDocument> params, SchemaJson& issues);
+    // id is optional because we may still want to validate based on the method, even if we can't
+    // detect when a response arrives
+    void validateRequest(option<Id> id, QString method, option<QJsonDocument> params, SchemaJson &issues, std::shared_ptr<LspMessage> msg);
+
+    void validateResponseSuccess(Id id, QJsonValue result, SchemaJson& issues, std::shared_ptr<LspMessage> msg);
 
     void validateResponseError(QJsonValue errorMethod, SchemaJson& rootIssues);
 
     LspMessage::Sender sender;
 
+    IdTracker idTracker {};
+
 };
 
 }
 
-Q_DECLARE_METATYPE(Lsp::LspMessage);
+Q_DECLARE_METATYPE(std::shared_ptr<Lsp::LspMessage>);
 
 #endif // LSPSCHEMAVALIDATOR_H

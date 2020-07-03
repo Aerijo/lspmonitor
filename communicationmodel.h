@@ -5,6 +5,7 @@
 #include <QStyledItemDelegate>
 #include <QPainter>
 #include <QIcon>
+#include <QSortFilterProxyModel>
 
 #include "lspschemavalidator.h"
 
@@ -20,17 +21,17 @@ public:
     QVariant data(const QModelIndex &index, int role = Qt::DisplayRole) const override;
 
 public slots:
-    void append(Lsp::LspMessage msg);
+    void append(std::shared_ptr<Lsp::LspMessage> msg);
 
-    void append(QVector<Lsp::LspMessage> msgs);
+    void append(QVector<std::shared_ptr<Lsp::LspMessage>> msgs);
 
 private slots:
     void onDebounceEnd();
 
 private:
-    QVector<Lsp::LspMessage> messages {};
+    QVector<std::shared_ptr<Lsp::LspMessage>> messages {};
 
-    QVector<Lsp::LspMessage> debounceBuffer {};
+    QVector<std::shared_ptr<Lsp::LspMessage>> debounceBuffer {};
 
     bool debouncing = false;
 
@@ -68,13 +69,19 @@ public:
     void paint(QPainter *painter, const QStyleOptionViewItem &option, const QModelIndex &index) const override {
         painter->setRenderHints(QPainter::Antialiasing);
 
-        Lsp::LspMessage msg = qvariant_cast<Lsp::LspMessage>(index.data());
+        std::shared_ptr<Lsp::LspMessage> msg = qvariant_cast<std::shared_ptr<Lsp::LspMessage>>(index.data());
 
+        QString sum;
 
+        QDateTime timestamp;
+        timestamp.setTime_t(msg->timestamp / 1000);
+        sum += timestamp.toString(Qt::SystemLocaleShortDate) + ": ";
 
-        QString sum = "(" + QString::number(msg.timestamp) + ") ";
+        if (msg->kind == Lsp::LspMessage::Kind::Response && msg->match) {
+            sum += "(+" + QString::number(msg->timestamp - msg->match->timestamp) + ") ";
+        }
 
-        switch (msg.sender) {
+        switch (msg->sender) {
             case Lsp::LspMessage::Sender::Client:
                 sum += "Client";
                 break;
@@ -90,17 +97,17 @@ public:
 
         QIcon icon = unknown;
 
-        switch (msg.kind) {
+        switch (msg->kind) {
             case Lsp::LspMessage::Kind::Notification:
-                sum += "Notification (" + msg.contents["method"].toString() + ")";
+                sum += "Notification (" + msg->contents["method"].toString() + ")";
                 icon = notifClient;
                 break;
             case Lsp::LspMessage::Kind::Request:
-                sum += "Request (" + msg.contents["method"].toString() + ")";
+                sum += "Request (" + QString::number(msg->contents["id"].toInt()) + ", " + msg->contents["method"].toString() + ")";
                 icon = requestClient;
                 break;
             case Lsp::LspMessage::Kind::Response:
-                sum += "Response";
+                sum += "Response (" + QString::number(msg->contents["id"].toInt()) + ", " + (msg->match ? msg->match->contents["method"].toString() : "UNKNOWN") + ")";
                 icon = responseClient;
                 break;
             case Lsp::LspMessage::Kind::Batch:
@@ -112,7 +119,7 @@ public:
         }
 
 
-        sum += " with " + QString::number(msg.issues.issueCount()) + " issues";
+        sum += " with " + QString::number(msg->issues.issueCount()) + " issues";
         QString text = sum;
 
         QRect iconRect = option.rect;
@@ -139,11 +146,9 @@ public:
         }
 
         icon.paint(painter, iconRect, Qt::AlignCenter, selectMode);
-        if (msg.issues.issueCount() > 0) {
+        if (msg->issues.issueCount() > 0) {
             error.paint(painter, errorRect, Qt::AlignCenter, selectMode);
         }
-
-
 
 //        QRect box (space);
 //        box.adjust(1, 1, -1, -1);
@@ -159,5 +164,95 @@ public:
     }
 };
 
+struct LogFilter {
+    bool filterMethod = true;
+    bool exactMethodMatch = false;
+    QString method = "";
+
+    bool filterSender = false;
+    Lsp::LspMessage::Sender sender = Lsp::LspMessage::Sender::Client;
+
+    bool filterKind = false;
+    QVector<Lsp::LspMessage::Kind> kinds {};
+
+    bool check(const Lsp::LspMessage &msg) const {
+        if (filterMethod) {
+            if (method.size() > msg.method.size()) {
+                return false;
+            }
+
+            if (exactMethodMatch) {
+                if (!msg.method.startsWith(method)) {
+                    return false;
+                }
+            } else {
+                int i = 0;
+
+                for (QChar c : method) {
+                    bool found = false;
+                    for (; i < msg.method.size(); i++) {
+                        if (msg.method.at(i) == c) {
+                            found = true;
+                            break;
+                        }
+                    }
+                    if (!found) {
+                        return false;
+                    }
+                }
+            }
+        }
+
+        if (filterSender) {
+            if (msg.sender != sender) {
+                return false;
+            }
+        }
+
+        if (filterKind) {
+            if (!kinds.contains(msg.kind)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    LogFilter() = default;
+    LogFilter(QString method) : method(method) {}
+};
+
+class FilteredCommModel : public QSortFilterProxyModel {
+    Q_OBJECT
+
+public:
+    FilteredCommModel(QObject *parent = nullptr) : QSortFilterProxyModel(parent) {}
+
+    void setFilter(LogFilter filter) { this->filter = filter; }
+
+    void updateFilter(const QString &text) {
+        filter.method = text;
+        invalidateFilter();
+    }
+
+protected:
+    bool filterAcceptsRow(int sourceRow, const QModelIndex &sourceParent) const override {
+        auto v = sourceModel()->data(sourceModel()->index(sourceRow, 0, sourceParent));
+        auto msg = qvariant_cast<std::shared_ptr<Lsp::LspMessage>>(v);
+        return filter.check(*msg);
+    }
+
+
+    bool allowByMethod(QString method) const {
+        if (!filter.filterMethod) {
+            return true;
+        }
+
+        return method.startsWith(filter.method);
+    }
+
+private:
+    LogFilter filter;
+};
 
 #endif // COMMUNICATIONMODEL_H
