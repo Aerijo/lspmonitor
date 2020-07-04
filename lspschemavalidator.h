@@ -9,8 +9,6 @@
 #include "option.h"
 #include "messagebuilder.h"
 
-
-
 namespace Lsp {
 
 /**
@@ -21,51 +19,48 @@ struct Version {
     int major;
     int minor;
     int patch;
-};
 
-class Uri {
-
+    Version(int major, int minor, int patch);
 };
 
 /**
- * @brief URI that refers to a document. Encoded as a string,
+ * URI that refers to a document. Encoded as a string,
  * but URI structure expected.
  */
 class DocumentUri {
     QString raw;
-
-
 };
 
 /**
- * @brief Represents an LSP Id (number or string)
+ * Represents an LSP Id (number or string)
  */
-struct Id {
+class Id {
+public:
+    Id();
+    Id(int id);
+    Id(QString id);
+
+    bool isValid() const;
+    bool isNumber() const;
+    bool isString() const;
+
+    int getNumber() const;
+    QString getString() const;
+
+private:
     enum class Kind {
         String,
         Number,
+        Invalid,
     } kind;
 
     QString stringId {};
     int numberId {};
-
-    bool isString() { return kind == Kind::String; }
-    bool isNumber() { return kind == Kind::Number; }
-
-    Id(QString id) : kind(Kind::String), stringId(id) {}
-    Id(int id) : kind(Kind::Number), numberId(id) {}
 };
 
-enum class Source {
+enum class Entity {
     Client,
     Server,
-};
-
-enum class MessageKind {
-    Unknown,
-    Notification,
-    Request,
-    Response,
 };
 
 enum class ErrorCodes {
@@ -139,439 +134,6 @@ enum class InitializeError {
     Other,
 };
 
-struct Position {
-    qint64 line;
-    qint64 character;
-};
-
-struct Range {
-    Position start;
-    Position end;
-};
-
-struct Location {
-    DocumentUri uri;
-    Range range;
-};
-
-struct LocationLink {
-    option<Range> originSelectionRange;
-    DocumentUri targetUri;
-    Range targetRange;
-    Range targetSelectionRange;
-};
-
-struct DiagnosticRelatedInformation {
-    Location location;
-    QString message;
-};
-
-struct Diagnostic {
-    Range range;
-    option<DiagnosticSeverity> severity;
-    option<Id> code;
-    QString source;
-    QString message;
-    option<QVector<DiagnosticTag>> tags;
-    option<QVector<DiagnosticRelatedInformation>> relatedInformation;
-};
-
-struct Command {
-    QString title;
-    QString command;
-    option<QVector<QJsonValue>> arguments;
-};
-
-struct TextDocumentIdentifier {
-    DocumentUri uri;
-};
-
-struct VersionedTextDocumentIdentifier : public TextDocumentIdentifier {
-    option<qint64> version;
-};
-
-struct TextEdit {
-    Range range;
-    QString newText;
-};
-
-struct FileOperation {};
-
-struct TextDocumentEdit : public FileOperation {
-    VersionedTextDocumentIdentifier textDocument;
-    QVector<TextEdit> edits;
-};
-
-struct CreateFileOptions {
-    option<bool> overwrite;
-    option<bool> ignoreIfExists;
-};
-
-struct CreateFile : public FileOperation {
-    DocumentUri uri;
-    option<CreateFileOptions> options;
-};
-
-struct RenameFileOptions {
-    option<bool> overwrite;
-    option<bool> ignoreIfExists;
-};
-
-struct RenameFile : public FileOperation {
-    DocumentUri oldUri;
-    DocumentUri newUri;
-    option<RenameFileOptions> options;
-};
-
-struct DeleteFileOptions {
-    option<bool> recursive;
-    option<bool> ignoreIfNotExists;
-};
-
-struct DeleteFile : public FileOperation {
-    DocumentUri uri;
-    option<DeleteFileOptions> options;
-};
-
-struct WorkspaceEdit {
-    option<QMap<DocumentUri, QVector<TextEdit>>> changes;
-    option<QVector<FileOperation*>> documentChanges;
-};
-
-struct WorkspaceEditClientCapabilities {
-    option<bool> documentChanges;
-    option<QVector<ResourceOperationKind>> resourceOperations;
-    option<FailureHandlingKind> failureHandling;
-};
-
-struct TextDocumentItem {
-    DocumentUri uri;
-    QString languageId;
-    qint64 version;
-    QString text;
-};
-
-struct TextDocumentPositionParams {
-    TextDocumentIdentifier textDocument;
-    Position position;
-};
-
-struct DocumentFilter {
-    option<QString> language;
-    option<QString> scheme;
-    option<QString> pattern;
-};
-
-using DocumentSelector = QVector<DocumentFilter>;
-
-struct StaticRegistrationOptions {
-    option<QString> id;
-};
-
-struct TextDocumentRegistrationOptions {
-    option<DocumentSelector> documentSelector;
-};
-
-struct MarkupContent {
-    MarkupKind kind;
-    QString value;
-};
-
-struct WorkDoneProgressBegin {
-    QString title;
-    option<bool> cancellable;
-    option<QString> message;
-    option<int> percentage;
-};
-
-struct WorkDoneProgressReport {
-    option<bool> cancellable;
-    option<QString> message;
-    option<int> percentage;
-};
-
-struct WorkDoneProgressEnd {
-    option<QString> message;
-};
-
-using ProgressToken = Id;
-
-struct WorkDoneProgressParams {
-    option<ProgressToken> workDoneToken;
-};
-
-struct WorkDoneProgressOptions {
-    option<bool> workDoneProgress;
-};
-
-struct ClientInfo {
-    QString name;
-    option<QString> version;
-};
-
-struct ServerInfo {
-    QString name;
-    option<QString> version;
-};
-
-struct TextDocumentSyncClientCapabilities {
-    // TODO
-};
-
-struct CompletionClientCapabilities {
-    // TODO
-};
-
-struct HoverClientCapabilities {
-    // TODO
-};
-
-struct SignatureHelpClientCapabilities {
-    // TODO
-};
-
-struct DeclarationClientCapabilities {
-    // TODO
-};
-
-struct DefinitionClientCapabilities {
-    // TODO
-};
-
-struct TypeDefinitionClientCapabilities {
-    // TODO
-};
-
-struct ImplementationClientCapabilities {
-    // TODO
-};
-
-struct ReferenceClientCapabilities {
-    // TODO
-};
-
-struct DocumentHighlightClientCapabilities {
-    // TODO
-};
-
-struct DocumentSymbolClientCapabilities {
-    // TODO
-};
-
-struct CodeActionClientCapabilities {
-    // TODO
-};
-
-struct CodeLensClientCapabilities {
-    // TODO
-};
-
-struct DocumentLinkClientCapabilities {
-    // TODO
-};
-
-struct DocumentColorClientCapabilities {
-    // TODO
-};
-
-struct DocumentFormattingClientCapabilities {
-    // TODO
-};
-
-struct DocumentRangeFormattingClientCapabilities {
-    // TODO
-};
-
-struct DocumentOnTypeFormattingClientCapabilities {
-    // TODO
-};
-
-struct RenameClientCapabilities {
-    // TODO
-};
-
-struct PublishDiagnosticsClientCapabilities {
-    // TODO
-};
-
-struct FoldingRangeClientCapabilities {
-    // TODO
-};
-
-struct SelectionRangeClientCapabilities {
-    // TODO
-};
-
-struct TextDocumentClientCapabilities {
-    option<TextDocumentSyncClientCapabilities> synchronization;
-    option<CompletionClientCapabilities> completion;
-    option<HoverClientCapabilities> hover;
-    option<SignatureHelpClientCapabilities> signatureHelp;
-    option<DeclarationClientCapabilities> declaration;
-    option<DefinitionClientCapabilities> definition;
-    option<TypeDefinitionClientCapabilities> typeDefinition;
-    option<ImplementationClientCapabilities> implementation;
-    option<ReferenceClientCapabilities> references;
-    option<DocumentHighlightClientCapabilities> documentHighlight;
-    option<DocumentSymbolClientCapabilities> documentSymbol;
-    option<CodeActionClientCapabilities> codeAction;
-    option<CodeLensClientCapabilities> codeLens;
-    option<DocumentLinkClientCapabilities> documentLink;
-    option<DocumentColorClientCapabilities> colorProvider;
-    option<DocumentFormattingClientCapabilities> formatting;
-    option<DocumentRangeFormattingClientCapabilities> rangeFormatting;
-    option<DocumentOnTypeFormattingClientCapabilities> onTypeFormatting;
-    option<RenameClientCapabilities> rename;
-    option<PublishDiagnosticsClientCapabilities> publishDiagnostics;
-    option<FoldingRangeClientCapabilities> foldingRange;
-    option<SelectionRangeClientCapabilities> selectionRange;
-};
-
-struct DidChangeConfigurationClientCapabilities {
-    // TODO
-};
-
-struct DidChangeWatchedFilesClientCapabilities {
-    // TODO
-};
-
-struct WorkspaceSymbolClientCapabilities {
-    // TODO
-};
-
-struct ExecuteCommandClientCapabilities {
-    // TODO
-};
-
-struct WindowClientCapabilities {
-    // TODO
-};
-
-struct WorkspaceClientCapabilities {
-    option<bool> applyEdit;
-    option<WorkspaceEditClientCapabilities> workspaceEdit;
-    option<DidChangeConfigurationClientCapabilities> didChangeConfiguration;
-    option<DidChangeWatchedFilesClientCapabilities> didChangeWatchedFiles;
-    option<WorkspaceSymbolClientCapabilities> symbol;
-    option<ExecuteCommandClientCapabilities> executeCommand;
-    option<bool> workspaceFolders;
-    option<bool> configuration;
-};
-
-struct ClientCapabilities {
-    option<WorkspaceClientCapabilities> workspace;
-    option<TextDocumentClientCapabilities> textDocument;
-    option<WindowClientCapabilities> window;
-    option<QJsonValue> experimental;
-};
-
-struct WorkspaceFolder {
-    // TODO
-};
-
-struct InitializeParams : public WorkDoneProgressParams {
-    option<qint64> processId;
-    option<ClientInfo> clientInfo;
-    option<option<QString>> rootPath; // missing=none, null=some(none), string=some(some(value))
-    option<DocumentUri> rootUri;
-    option<QJsonValue> initializationOptions;
-    ClientCapabilities capabilities;
-    option<Trace> trace;
-    option<option<QVector<WorkspaceFolder>>> workspaceFolders;
-};
-
-struct ServerCapabilities {
-    // TODO
-};
-
-struct InitializeResult {
-    ServerCapabilities capabilities;
-    option<ServerInfo> serverInfo;
-};
-
-class Request;
-
-class Response;
-
-class ParsedMessage;
-
-class Message {
-public:
-    static ParsedMessage fromJson(QJsonDocument json);
-
-    virtual QJsonDocument toJson() const;
-
-    /** Minimum LSP version this message is compatible with */
-    Version getMinimumVersion() const;
-
-    /** Maximum of introduced versions of present properties. E.g., if a Diagnostic has `tags`, then it would be 3.15.0 */
-    Version getMaximumFeatureVersion() const;
-
-private:
-    /** Time this message was received (upon full parse) */
-    qint64 timestamp;
-};
-
-class UnknownMessage : public Message {
-private:
-    QJsonDocument raw;
-};
-
-class Notification : public Message {
-public:
-    QString getMethod() const;
-
-private:
-    /** If the notification can be safely ignored by clients/servers */
-    bool optional;
-};
-
-class Request : public Message {
-public:
-    QString getMethod() const;
-
-private:
-    Id id;
-
-    Response* response { nullptr };
-};
-
-class Response : public Message {
-public:
-    bool isSuccessful() const;
-
-private:
-    option<Id> id;
-
-    Request* request { nullptr };
-};
-
-class ResponseError {
-    int code;
-
-    QString message;
-
-    QJsonValue* data;
-};
-
-class GenericNotification : public Notification {
-private:
-    QString method;
-
-    QJsonValue* params;
-};
-
-class CancelRequestNotification : public Notification {
-    explicit CancelRequestNotification(Id id);
-};
-
-class ProgressNotification : public Notification {
-private:
-    Id token;
-
-    QJsonValue value;
-};
-
 struct SchemaIssue {
     enum class Severity {
         Error = 1,
@@ -594,9 +156,9 @@ class SchemaJson {
 public:
     QVector<SchemaIssue> localIssues;
 
-    bool isObject() const { return kind == Kind::Object; }
+    bool isObject() const;
 
-    bool isArray() const { return kind == Kind::Array; };
+    bool isArray() const;
 
     void error(QString msg);
 
@@ -608,11 +170,11 @@ public:
 
     int issueCount() const;
 
-    int hintCount();
+    int hintCount() const;
 
-    int warningCount();
+    int warningCount() const;
 
-    int errorCount();
+    int errorCount() const;
 
     SchemaJson member(QString key);
 
@@ -646,10 +208,7 @@ private:
  */
 struct LspMessage {
     /** Which entity sent the message */
-    enum class Sender {
-        Client,
-        Server,
-    } sender;
+    Entity sender;
 
     /** What kind of JSON-RPC message this is */
     enum class Kind {
@@ -681,6 +240,9 @@ struct LspMessage {
     /** The method associated with this message (the method of the Request if a Response) */
     QString method;
 
+    /** A unique identifier, also the index of the message in the Model */
+    int index = -1;
+
     // TODO: Remove & turn message kinds into sub classes
     std::shared_ptr<LspMessage> match;
 
@@ -691,37 +253,217 @@ struct LspMessage {
     LspMessage(Kind kind, SchemaJson issues, MessageBuilder::Message msg);
 };
 
+struct Context {
+    qint64 timestamp;
+    Entity sender;
+    QJsonDocument contents;
+    SchemaJson issues = SchemaJson::makeObject();
+
+    Context(qint64 timestamp, Entity sender, QJsonDocument contents);
+};
+
+/**
+ * Represents a generic message derived from a Frame payload
+ * that could be parsed as JSON. Messages are subclassed by their type,
+ * such that the more the message conforms to a known kind the more
+ * precise the type (and therefore compact the store).
+ */
+class Message {
+public:
+    /** What kind of JSON-RPC message this is */
+    enum class Kind {
+        /** The message is a Notification (no acknowlegement required) */
+        Notification,
+
+        /** The message is a request (expects a response) */
+        Request,
+
+        /** The message is a response (matches with previous request) */
+        Response,
+
+        /** The message is a list of messages send in a single array */
+        Batch, // TODO: Support this. For now, just split into individual messages
+
+        /** The message does not conform to the set of known kinds */
+        Unknown,
+    };
+
+    Entity getSender() const;
+
+    qint64 getTimestamp() const;
+
+    int getIndex() const;
+
+    void setIndex(int index);
+
+    SchemaJson* getIssues();
+
+    int getIssueCount() const;
+
+    virtual option<QString> tryGetMethod() const = 0;
+
+    virtual Kind getKind() const = 0;
+
+    virtual QJsonDocument getContents() const = 0;
+
+    explicit Message(Context c);
+
+private:
+    /** Who sent this message */
+    Entity sender;
+
+    /** When the message was fully received */
+    qint64 timestamp;
+
+    /** Any issues with the message's LSP compliance (nullptr if none) */
+    std::unique_ptr<SchemaJson> issues;
+
+    /** The index of the message in the overall sequence */
+    int index = -1;
+};
+
+/**
+ * Any message that doesn't fall under a more specific class. Generally
+ * because it's shape is incorrect (no "method" member or "id" member).
+ *
+ * For now includes because "jsonrpc" member incorrect, but this may
+ * be moved to an issues value.
+ */
+class GenericMessage : public Message {
+public:
+    GenericMessage(Context c);
+
+    option<QString> tryGetMethod() const override;
+
+    Kind getKind() const override;
+
+    QJsonDocument getContents() const override;
+
+private:
+    QJsonDocument contents;
+};
+
+class Notification : public Message {
+public:
+    Notification(Context c, QString method);
+
+    Kind getKind() const override;
+
+    option<QString> tryGetMethod() const override;
+
+    QString getMethod() const;
+
+private:
+    QString method;
+};
+
+class GenericNotification : public Notification {
+public:
+    GenericNotification(Context c, QString method);
+
+    QJsonDocument getContents() const override;
+
+private:
+    QJsonDocument contents;
+};
+
+class Response;
+
+class Request : public Message {
+public:
+    Request(Context c, QString method, Id id);
+
+    Kind getKind() const override;
+
+    option<QString> tryGetMethod() const override;
+
+    QString getMethod() const;
+
+    Id getId() const;
+
+    std::shared_ptr<Response> getResponse();
+
+    void setResponse(std::shared_ptr<Response> response);
+
+private:
+    std::shared_ptr<Response> response;
+
+    QString method;
+
+    Id id;
+};
+
+class GenericRequest : public Request {
+public:
+    GenericRequest(Context c, QString method, Id id);
+
+    QJsonDocument getContents() const override;
+
+private:
+    QJsonDocument contents;
+};
+
+class Response : public Message {
+public:
+    Response(Context c, Id id);
+
+    Kind getKind() const override;
+
+    Id getId() const;
+
+    option<QString> tryGetMethod() const override;
+
+    /** Get the duration between the original Requeat and this Response */
+    qint64 getDuration() const;
+
+private:
+    Id id;
+
+    std::shared_ptr<Request> request;
+};
+
+class GenericResponse : public Response {
+public:
+    GenericResponse(Context c, Id id);
+
+    QJsonDocument getContents() const override;
+
+private:
+    QJsonDocument contents;
+};
+
 /**
  * Tracks active message ID's, so we can link them to requests and detect
  * duplicates
  *
- * Definitely not thread safe
+ * Definitely not thread safe. Needs to be linked with another, so responses
+ * can be matched with requests of the other, and vice versa
  */
+template <typename T>
 class IdTracker {
 public:
     IdTracker() = default;
 
     /** Links the two stores, so that retrievals work on the other one */
-    void linkWith(IdTracker &other);
+    void linkWith(IdTracker<T> &other);
 
     /**
      * Inserts the request into the tracker, returning a pointer to the old message stored
      * under that ID if it exists.
      */
-    std::shared_ptr<LspMessage> insert(Id id, std::shared_ptr<LspMessage> msg);
+    T insert(Id id, T msg);
 
     /**
      * Returns a pointer to the message stored under that ID if it exists, and
      * removes the message from the tracker.
      */
-    std::shared_ptr<LspMessage> retrieve(Id id);
+    T retrieve(Id id);
 
 private:
-    QMap<QString, std::shared_ptr<LspMessage>> stringIds {};
-    QMap<int, std::shared_ptr<LspMessage>> numberIds {};
+    QMap<QString, T> stringIds {};
+    QMap<int, T> numberIds {};
 
-    QMap<QString, std::shared_ptr<LspMessage>>* otherStringIds;
-    QMap<int, std::shared_ptr<LspMessage>>* otherNumberIds;
+    IdTracker<T> *other;
 };
 
 
@@ -738,12 +480,12 @@ class LspSchemaValidator : public QObject {
     Q_OBJECT
 
 public:
-    LspSchemaValidator(LspMessage::Sender sender, QObject* parent = nullptr);
+    LspSchemaValidator(Entity sender, QObject* parent = nullptr);
 
     void linkWith(LspSchemaValidator &other);
 
 signals:
-    void emitLspMessage(std::shared_ptr<LspMessage> message);
+    void emitLspMessage(std::shared_ptr<Message> message);
 
 public slots:
     void onMessage(MessageBuilder::Message message);
@@ -753,24 +495,31 @@ private:
 
     void onMessageObject(MessageBuilder::Message message, QJsonObject contents);
 
+    void validateJsonrpcMember(Context &c, const QJsonObject &contents);
+
     void validateNotification(QString method, option<QJsonDocument> params, SchemaJson& issues);
 
-    // id is optional because we may still want to validate based on the method, even if we can't
-    // detect when a response arrives
     void validateRequest(option<Id> id, QString method, option<QJsonDocument> params, SchemaJson &issues, std::shared_ptr<LspMessage> msg);
 
     void validateResponseSuccess(Id id, QJsonValue result, SchemaJson& issues, std::shared_ptr<LspMessage> msg);
 
     void validateResponseError(QJsonValue errorMethod, SchemaJson& rootIssues);
 
-    LspMessage::Sender sender;
+    std::unique_ptr<Notification> buildNotification(Context c, QString method);
 
-    IdTracker idTracker {};
+    std::unique_ptr<Request> buildRequest(Context c, QString method, Id id);
+
+    std::unique_ptr<Response> buildResponse(Context c, Id id);
+
+    Entity sender;
+
+    IdTracker<std::shared_ptr<Request>> idTracker {};
 
 };
 
 }
 
 Q_DECLARE_METATYPE(std::shared_ptr<Lsp::LspMessage>);
+Q_DECLARE_METATYPE(std::shared_ptr<Lsp::Message>);
 
 #endif // LSPSCHEMAVALIDATOR_H

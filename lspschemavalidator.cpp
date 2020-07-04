@@ -4,23 +4,86 @@
 
 namespace Lsp {
 
-LspSchemaValidator::LspSchemaValidator(LspMessage::Sender sender, QObject* parent) : QObject(parent), sender(sender) {}
+Version::Version(int major, int minor, int patch) : major(major), minor(minor), patch(patch) {}
+
+Id::Id() : kind(Kind::Invalid) {}
+Id::Id(int id) : kind(Kind::Number), numberId(id) {}
+Id::Id(QString id) : kind(Kind::String), stringId(id) {}
+bool Id::isValid() const { return kind != Kind::Invalid; }
+bool Id::isNumber() const { return kind == Kind::Number; }
+bool Id::isString() const { return kind == Kind::String; }
+int Id::getNumber() const { return numberId; }
+QString Id::getString() const { return stringId; }
+
+Context::Context(qint64 timestamp, Entity sender, QJsonDocument contents) : timestamp(timestamp), sender(sender), contents(contents) {}
+
+Message::Message(Context c) : sender(c.sender), timestamp(c.timestamp) {}
+SchemaJson* Message::getIssues() { return issues.get(); }
+Entity Message::getSender() const { return sender; }
+qint64 Message::getTimestamp() const { return timestamp; }
+int Message::getIndex() const { return index; }
+int Message::getIssueCount() const {
+    if (issues) {
+        return issues->issueCount();
+    } else {
+        return 0;
+    }
+}
+
+GenericMessage::GenericMessage(Context c) : Message(c), contents(c.contents) {}
+option<QString> GenericMessage::tryGetMethod() const { return {}; }
+Message::Kind GenericMessage::getKind() const { return Kind::Unknown; }
+QJsonDocument GenericMessage::getContents() const { return contents; }
+
+Notification::Notification(Context c, QString method) : Message(c), method(method) {}
+Message::Kind Notification::getKind() const { return Kind::Notification; }
+option<QString> Notification::tryGetMethod() const { return getMethod(); }
+QString Notification::getMethod() const { return method; }
+
+GenericNotification::GenericNotification(Context c, QString method) : Notification(c, method), contents(c.contents) {}
+QJsonDocument GenericNotification::getContents() const { return contents; }
+
+Request::Request(Context c, QString method, Id id) : Message(c), method(method), id(id) {}
+Message::Kind Request::getKind() const { return Kind::Request; }
+option<QString> Request::tryGetMethod() const { return getMethod(); }
+QString Request::getMethod() const { return method; }
+Id Request::getId() const { return id; }
+std::shared_ptr<Response> Request::getResponse() { return response; }
+void Request::setResponse(std::shared_ptr<Response> response) { this->response = response; }
+
+GenericRequest::GenericRequest(Context c, QString method, Id id) : Request(c, method, id), contents(c.contents) {}
+QJsonDocument GenericRequest::getContents() const { return contents; }
+
+Response::Response(Context c, Id id) : Message(c), id(id) {}
+Message::Kind Response::getKind() const { return Kind::Response; }
+Id Response::getId() const { return id; }
+option<QString> Response::tryGetMethod() const {
+    if (!request) {
+        return {};
+    }
+    return request->getMethod();
+}
+qint64 Response::getDuration() const {
+    if (!request) {
+        return -1;
+    }
+
+    return getTimestamp() - request->getTimestamp();
+}
+
+GenericResponse::GenericResponse(Context c, Id id) : Response(c, id), contents(c.contents) {}
+QJsonDocument GenericResponse::getContents() const { return contents; }
+
+LspSchemaValidator::LspSchemaValidator(Lsp::Entity sender, QObject* parent) : QObject(parent), sender(sender) {}
 
 SchemaIssue::SchemaIssue(Severity severity, QString msg) : severity(severity), message(msg) {}
-
-SchemaIssue SchemaIssue::error(QString msg) {
-    return SchemaIssue(Severity::Error, msg);
-}
+SchemaIssue SchemaIssue::error(QString msg) { return SchemaIssue(Severity::Error, msg); }
 
 SchemaJson::SchemaJson() : SchemaJson(Kind::Empty) {}
-
-SchemaJson SchemaJson::makeObject() {
-    return SchemaJson(Kind::Object);
-}
-
-SchemaJson SchemaJson::makeArray() {
-    return SchemaJson(Kind::Array);
-}
+SchemaJson SchemaJson::makeObject() { return SchemaJson(Kind::Object); }
+SchemaJson SchemaJson::makeArray() { return SchemaJson(Kind::Array); }
+bool SchemaJson::isObject() const { return kind == Kind::Object; }
+bool SchemaJson::isArray() const { return kind == Kind::Array; }
 
 SchemaJson SchemaJson::member(QString key) {
     if (kind != Kind::Object) {
@@ -123,8 +186,9 @@ void LspSchemaValidator::onMessage(MessageBuilder::Message message) {
     } else if (root.isObject()) {
         onMessageObject(message, root.object());
     } else {
-        auto lsp = std::make_shared<LspMessage>(message);
-        lsp->issues.error("Unexpected message JSON type");
+        Context c (message.timestamp, sender, message.contents);
+        auto lsp = std::make_shared<GenericMessage>(c);
+        lsp->getIssues()->error("Unexpected message JSON type");
         emit emitLspMessage(lsp);
     }
 }
@@ -138,151 +202,85 @@ void LspSchemaValidator::onMessageBatch(MessageBuilder::Message message, QJsonAr
             // Note: Fallthrough / recursive call not used because constructing a meaningful Message with the
             // QJsonDocument incompatible value is difficult. Also it may cause a child array to be interpreted
             // as a batch itself, which is forbidden
-            auto errMsg = std::make_shared<LspMessage>(message);
-            errMsg->issues.error("Unexpected message JSON type");
-            emitLspMessage(errMsg);
+//            auto errMsg = std::make_shared<LspMessage>(message);
+//            errMsg->issues.error("Unexpected message JSON type");
+//            emitLspMessage(errMsg);
+            throw QUnhandledException();
         }
     }
 }
 
 void LspSchemaValidator::onMessageObject(MessageBuilder::Message message, QJsonObject contents) {
-    auto lspMsg = std::make_shared<LspMessage>(LspMessage::Kind::Unknown, SchemaJson::makeObject(), message);
-    lspMsg->sender = sender;
-    auto &issues = lspMsg->issues;
+    std::unique_ptr<Message> result;
 
-    // 1. Assert "jsonrpc" property is present + has value "2.0"
-    auto it = contents.find("jsonrpc");
-    if (it == contents.end()) {
-        issues.error("'jsonrpc' member missing");
-    } else if (!it.value().isString()) {
-        issues.keyError("jsonrpc", "Expected value to be the string \"2.0\"");
-    } else if (it.value().toString().compare("2.0") != 0) {
-        issues.member("jsonrpc").error("Expected value to be \"2.0\"");
-    }
+    Context c (message.timestamp, sender, QJsonDocument(contents));
 
-    // 2. Detect what kind of message it is
+    // Ensure "jsonrpc" member correct
+    validateJsonrpcMember(c, contents);
+
+    // Detect what kind of message it is
+    auto &issues = c.issues;
 
     auto methodIt = contents.find("method");
     auto idIt = contents.find("id");
 
-    if (methodIt != contents.end()) {
-        option<QString> method;
-        option<QJsonDocument> params {};
-        option<Id> id;
+    option<QString> method;
+    option<QJsonDocument> params {};
+    option<Id> id;
 
-        if (methodIt.value().isString()) {
-            method = methodIt.value().toString();
-            lspMsg->method = method.value();
-        } else {
-            issues.keyError("method", "Expected method to be a string");
-        }
+    if (methodIt.value().isString()) {
+        method = methodIt.value().toString();
+    } else {
+        issues.keyError("method", "Expected method to be a string");
+    }
 
-        if (idIt != contents.end()) {
-            lspMsg->kind = LspMessage::Kind::Request;
-
-            if (idIt.value().isString()) {
-                id = idIt.value().toString();
-            } else if (idIt.value().isDouble()) {
-                id = idIt.value().toInt();
-            } else {
-                issues.keyError("id", "Expected id to be a string or number");
-            }
-
-        } else {
-            lspMsg->kind = LspMessage::Kind::Notification;
-        }
-
-        for (auto it = contents.begin(); it != contents.end(); it++) {
-            if (it.key() == "jsonrpc" || it.key() == "method" || it.key() == "id") {
-                continue;
-            }
-
-            if (it.key() == "params") {
-                if (it.value().isObject()) {
-                    params = QJsonDocument(it.value().toObject());
-                } else if (it.value().isArray()) {
-                    params = QJsonDocument(it.value().toArray());
-                } else {
-                    issues.keyError("params", "Expected params to be an object or array");
-                }
-
-                continue;
-            }
-
-            issues.keyError(it.key(), "Unexpected method '" + it.key() + "'");
-        }
-
-        if (method) {
-            if (lspMsg->kind == LspMessage::Kind::Notification) {
-                validateNotification(method.value(), params, issues);
-            } else {
-                validateRequest(id, method.value(), params, issues, lspMsg);
-            }
-        }
-
-    } else if (idIt != contents.end()) {
-        lspMsg->kind = LspMessage::Kind::Response;
-        option<Id> id;
-
+    if (idIt != contents.end()) {
         if (idIt.value().isString()) {
             id = idIt.value().toString();
         } else if (idIt.value().isDouble()) {
             id = idIt.value().toInt();
         } else {
             issues.keyError("id", "Expected id to be a string or number");
+            id = Id();
         }
-
-        if (id) {
-            auto match = idTracker.retrieve(id.value());
-            if (!match) {
-                issues.member("id").error("Unknown ID");
-            } else {
-                lspMsg->method = match->method;
-                lspMsg->match = match;
-                match->match = lspMsg;
-            }
-        }
-
-        bool isSuccess = false;
-        bool isError = false;
-
-        for (auto it = contents.begin(); it != contents.end(); it++) {
-            if (it.key() == "jsonrpc" || it.key() == "id") {
-                continue;
-            }
-
-            if (it.key() == "result") {
-                isSuccess = true;
-                continue;
-            }
-
-            if (it.key() == "error") {
-                isError = true;
-                continue;
-            }
-
-            issues.keyError(it.key(), "Unexpected method '" + it.key() + "'");
-        }
-
-        if (isSuccess) {
-            if (isError) {
-                issues.keyError("error", "'error' method not permitted when there is a result");
-            } else if (id) {
-                validateResponseSuccess(id.value(), contents.find("result").value(), issues, lspMsg);
-            }
-        } else if (isError) {
-            validateResponseError(contents.find("error").value(), issues);
-        } else {
-            issues.error("'result' or 'error' method required on Response");
-        }
-
-    } else {
-        issues.error("Could not identify message kind");
-        // TODO: Emit error
-        return;
     }
 
-    emitLspMessage(lspMsg);
+    for (auto it = contents.begin(); it != contents.end(); it++) {
+        if (it.key() == "jsonrpc" || it.key() == "method" || it.key() == "id" || it.key() == "params") {
+            continue;
+        }
+
+        issues.keyError(it.key(), "Unexpected member '" + it.key() + "'");
+    }
+
+    if (method) {
+        if (id) {
+            // method + id == Request
+            result = buildRequest(c, method.value(), id.value());
+        } else {
+            // method == Notification
+            result = buildNotification(c, method.value());
+        }
+    } else if (id) {
+        // id == Response
+        result = buildResponse(c, id.value());
+    } else {
+        issues.error("Could not identify message kind");
+        result = std::make_unique<GenericMessage>(c);
+    }
+
+    emitLspMessage(std::move(result));
+}
+
+void LspSchemaValidator::validateJsonrpcMember(Context &c, const QJsonObject &contents) {
+    auto it = contents.find("jsonrpc");
+    if (it == contents.end()) {
+        c.issues.error("'jsonrpc' member missing");
+    } else if (!it.value().isString()) {
+        c.issues.keyError("jsonrpc", "Expected value to be the string \"2.0\"");
+    } else if (it.value().toString().compare("2.0") != 0) {
+        c.issues.member("jsonrpc").error("Expected value to be \"2.0\"");
+    }
 }
 
 void LspSchemaValidator::validateResponseError(QJsonValue errorMethod, SchemaJson &rootIssues) {
@@ -347,39 +345,106 @@ void LspSchemaValidator::validateResponseError(QJsonValue errorMethod, SchemaJso
 }
 
 void LspSchemaValidator::validateNotification(QString method, option<QJsonDocument> params, SchemaJson &issues) {
-    issues.error("I don't like notifications");
+//    issues.error("I don't like notifications");
 }
 
 void LspSchemaValidator::validateRequest(option<Id> id, QString method, option<QJsonDocument> params, SchemaJson &issues, std::shared_ptr<LspMessage> msg) {
-    if (id) {
-        auto existing = idTracker.insert(id.value(), msg);
-        if (existing) {
-            issues.member("id").error("This ID value is already in use for an existing request (" + existing->contents["method"].toString() + ")");
-        }
-    }
+//    if (id) {
+//        auto existing = idTracker.insert(id.value(), msg);
+//        if (existing) {
+//            issues.member("id").error("This ID value is already in use for an existing request (" + existing->contents["method"].toString() + ")");
+//        }
+//    }
 }
 
 void LspSchemaValidator::validateResponseSuccess(Id id, QJsonValue result, SchemaJson &issues, std::shared_ptr<LspMessage> msg) {
 
 }
 
-std::shared_ptr<LspMessage> IdTracker::insert(Id id, std::shared_ptr<LspMessage> msg) {
-    std::shared_ptr<LspMessage> ret (nullptr);
+std::unique_ptr<Notification> LspSchemaValidator::buildNotification(Context c, QString method) {
+    return std::make_unique<GenericNotification>(c, method);
+
+//    if (it.key() == "params") {
+//        if (it.value().isObject()) {
+//            params = QJsonDocument(it.value().toObject());
+//        } else if (it.value().isArray()) {
+//            params = QJsonDocument(it.value().toArray());
+//        } else {
+//            issues.keyError("params", "Expected params to be an object or array");
+//        }
+
+//        continue;
+//    }
+}
+
+std::unique_ptr<Request> LspSchemaValidator::buildRequest(Context c, QString method, Id id) {
+    return std::make_unique<GenericRequest>(c, method, id);
+}
+
+std::unique_ptr<Response> LspSchemaValidator::buildResponse(Context c, Id id) {
+    return std::make_unique<GenericResponse>(c, id);
+
+//    auto match = idTracker.retrieve(id.value());
+//    if (!match) {
+//        issues.member("id").error("Unknown ID");
+//    } else {
+//        lspMsg->method = match->method;
+//        lspMsg->match = match;
+//        match->match = lspMsg;
+//    }
+
+
+
+//    bool isSuccess = false;
+//    bool isError = false;
+
+//    for (auto it = contents.begin(); it != contents.end(); it++) {
+//        if (it.key() == "jsonrpc" || it.key() == "id") {
+//            continue;
+//        }
+
+//        if (it.key() == "result") {
+//            isSuccess = true;
+//            continue;
+//        }
+
+//        if (it.key() == "error") {
+//            isError = true;
+//            continue;
+//        }
+
+//        issues.keyError(it.key(), "Unexpected method '" + it.key() + "'");
+//    }
+
+//    if (isSuccess) {
+//        if (isError) {
+//            issues.keyError("error", "'error' method not permitted when there is a result");
+//        } else if (id) {
+//            validateResponseSuccess(id.value(), contents.find("result").value(), issues, lspMsg);
+//        }
+//    } else if (isError) {
+//        validateResponseError(contents.find("error").value(), issues);
+//    } else {
+//        issues.error("'result' or 'error' method required on Response");
+//    }
+}
+
+template <typename T>
+T IdTracker<T>::insert(Id id, T msg) {
+    T ret (nullptr);
 
     if (id.isNumber()) {
-        auto it = numberIds.find(id.numberId);
+        auto it = numberIds.find(id.getNumber());
         if (it != numberIds.end()) {
             ret = it.value();
         }
-        numberIds[id.numberId] = msg;
-
+        numberIds[id.getNumber()] = msg;
     } else if (id.isString()) {
-        auto it = stringIds.find(id.stringId);
+        auto it = stringIds.find(id.getString());
         if (it != stringIds.end()) {
             ret = it.value();
         }
-        stringIds[id.stringId] = msg;
-
+        stringIds[id.getString()] = msg;
     } else {
         throw QUnhandledException();
     }
@@ -387,32 +452,31 @@ std::shared_ptr<LspMessage> IdTracker::insert(Id id, std::shared_ptr<LspMessage>
     return ret;
 }
 
-std::shared_ptr<LspMessage> IdTracker::retrieve(Id id) {
-    std::shared_ptr<LspMessage> ret (nullptr);
+template <typename T>
+T IdTracker<T>::retrieve(Id id) {
+    T ret;
 
     if (id.isNumber()) {
-        auto it = otherNumberIds->find(id.numberId);
-        if (it != otherNumberIds->end()) {
+        auto it = other->numberIds.find(id.getNumber());
+        if (it != other->numberIds.end()) {
             ret = it.value();
-            otherNumberIds->erase(it);
+            other->numberIds.erase(it);
         }
     } else if (id.isString()) {
-        auto it = otherStringIds->find(id.stringId);
-        if (it != otherStringIds->end()) {
+        auto it = other->stringIds.find(id.getString());
+        if (it != other->stringIds.end()) {
             ret = it.value();
-            otherStringIds->erase(it);
+            other->stringIds.erase(it);
         }
     }
 
     return ret;
 }
 
-void IdTracker::linkWith(IdTracker &other) {
-    otherNumberIds = &other.numberIds;
-    otherStringIds = &other.stringIds;
-
-    other.otherNumberIds = &numberIds;
-    other.otherStringIds = &stringIds;
+template <typename T>
+void IdTracker<T>::linkWith(IdTracker<T> &other) {
+    this->other = &other;
+    other.other = this;
 }
 
 void LspSchemaValidator::linkWith(LspSchemaValidator &other) {

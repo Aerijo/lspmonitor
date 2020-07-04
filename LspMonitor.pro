@@ -21,7 +21,6 @@ HEADERS += \
     communicationmodel.h \
     connectionstream.h \
     framebuilder.h \
-    lspmessagebuilder.h \
     lspschemavalidator.h \
     messagebuilder.h \
     option.h \

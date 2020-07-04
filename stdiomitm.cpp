@@ -5,7 +5,7 @@
 #include <QScrollBar>
 #include <iostream>
 
-StdioMitm::StdioMitm(QProcess *server, QObject *parent) : QObject(parent), server(server), clientValidator(Lsp::LspMessage::Sender::Client), serverValidator(Lsp::LspMessage::Sender::Server) {
+StdioMitm::StdioMitm(QProcess *server, QObject *parent) : QObject(parent), server(server), clientValidator(Lsp::Entity::Client), serverValidator(Lsp::Entity::Server) {
     clientIn = new StdinStream(this);
     clientOut = new StdoutStream(this);
 
@@ -78,15 +78,11 @@ void StdioMitm::onServerMessage(MessageBuilder::Message message) {
     qDebug() << "got server message";
 }
 
-void StdioMitm::onClientLspMessage(std::shared_ptr<Lsp::LspMessage> message) {
-    qDebug() << "got client lsp message with " + QString::number(message->issues.issueCount()) + " issues";
-
+void StdioMitm::onClientLspMessage(std::shared_ptr<Lsp::Message> message) {
     messages.append(message);
 }
 
-void StdioMitm::onServerLspMessage(std::shared_ptr<Lsp::LspMessage> message) {
-    qDebug() << "got server lsp message with " + QString::number(message->issues.issueCount()) + " issues";
-
+void StdioMitm::onServerLspMessage(std::shared_ptr<Lsp::Message> message) {
     messages.append(message);
 }
 

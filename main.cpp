@@ -15,6 +15,7 @@
 #include <QHBoxLayout>
 #include <QVBoxLayout>
 #include <QWindow>
+#include <QPushButton>
 
 #include <QStringListModel>
 #include <QStyledItemDelegate>
@@ -69,6 +70,11 @@ int main(int argc, char** argv) {
     splitter->setOrientation(Qt::Vertical);
     window->setCentralWidget(splitter);
 
+    QPushButton *save = new QPushButton();
+    save->setText("Save");
+    splitter->addWidget(save);
+
+    QObject::connect(save, &QPushButton::clicked, &mitm->messages, &CommunicationModel::save);
 
     QListView *view = new QListView(splitter);
     view->setModel(&mitm->messages);
@@ -92,6 +98,7 @@ int main(int argc, char** argv) {
 
     QVBoxLayout *flay = new QVBoxLayout(splitter);
     flay->setContentsMargins(0, 0, 0, 0);
+
     flay->addWidget(filterInput);
     flay->addWidget(fview);
 
@@ -116,6 +123,9 @@ int main(int argc, char** argv) {
     bool *atBottomf = new bool();
     QObject::connect(&mitm->messages, &QAbstractListModel::rowsAboutToBeInserted, [=]{ *atBottomf = fview->verticalScrollBar()->maximum() == fview->verticalScrollBar()->value(); });
     QObject::connect(&mitm->messages, &QAbstractListModel::rowsInserted, fview, [=]{ if (*atBottomf) { fview->scrollToBottom(); } });
+
+    view->setMouseTracking(true);
+    QObject::connect(view, &QListView::entered, &mitm->messages, &CommunicationModel::entered);
 
 
     window->show();

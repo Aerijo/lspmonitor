@@ -39,9 +39,9 @@ public slots:
 
     void onServerMessage(MessageBuilder::Message message);
 
-    void onClientLspMessage(std::shared_ptr<Lsp::LspMessage> message);
+    void onClientLspMessage(std::shared_ptr<Lsp::Message> message);
 
-    void onServerLspMessage(std::shared_ptr<Lsp::LspMessage> message);
+    void onServerLspMessage(std::shared_ptr<Lsp::Message> message);
 
     void onServerStderr();
 
