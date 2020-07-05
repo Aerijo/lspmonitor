@@ -122,7 +122,7 @@ void CommunicationModel::entered(const QModelIndex &index) {
     auto oldActive = active;
     auto oldActivePair = activePair;
 
-    active = index.row();
+    active = qvariant_cast<LspMessageItem>(index.data()).message->getIndex();
     activePair = -1;
 
     if (oldActive >= 0) {
