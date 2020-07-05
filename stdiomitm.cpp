@@ -6,17 +6,17 @@
 #include <iostream>
 
 StdioMitm::StdioMitm(QProcess *server, QObject *parent) : QObject(parent), server(server), clientValidator(Lsp::Entity::Client), serverValidator(Lsp::Entity::Server) {
-    clientIn = new StdinStream(this);
-    clientOut = new StdoutStream(this);
+    clientIn = std::make_unique<StdinStream>(this);
+    clientOut = std::make_unique<StdoutStream>(this);
 
-    serverIn = new ProcessStdinStream(server, this);
-    serverOut = new ProcessStdoutStream(server, this);
+    serverIn = std::make_unique<ProcessStdinStream>(server, this);
+    serverOut = std::make_unique<ProcessStdoutStream>(server, this);
 
-    connect(clientIn, &InputStream::emitInput, &clientFrames, &FrameBuilder::FrameBuilder::onInput);
-    connect(serverIn, &InputStream::emitInput, &serverFrames, &FrameBuilder::FrameBuilder::onInput);
+    connect(clientIn.get(), &InputStream::emitInput, &clientFrames, &FrameBuilder::FrameBuilder::onInput);
+    connect(serverIn.get(), &InputStream::emitInput, &serverFrames, &FrameBuilder::FrameBuilder::onInput);
 
-    connect(clientIn, &InputStream::emitInput, serverOut, &OutputStream::onOutput);
-    connect(serverIn, &InputStream::emitInput, clientOut, &OutputStream::onOutput);
+    connect(clientIn.get(), &InputStream::emitInput, serverOut.get(), &OutputStream::onOutput);
+    connect(serverIn.get(), &InputStream::emitInput, clientOut.get(), &OutputStream::onOutput);
 
     connect(&clientFrames, &FrameBuilder::FrameBuilder::emitError, this, &StdioMitm::onClientFrameError);
     connect(&serverFrames, &FrameBuilder::FrameBuilder::emitError, this, &StdioMitm::onServerFrameError);

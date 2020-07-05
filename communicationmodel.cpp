@@ -25,8 +25,8 @@ QVariant CommunicationModel::data(const QModelIndex &index, int role) const {
 
         LspMessageItem item {};
         item.message = msg;
-
-
+        item.active = active == index.row();
+        item.pair = activePair == index.row();
         s.setValue(item);
         return s;
     } else {
@@ -39,6 +39,12 @@ void CommunicationModel::append(std::shared_ptr<Lsp::Message> msg) {
 }
 
 void CommunicationModel::append(QVector<std::shared_ptr<Lsp::Message>> msgs) {
+    int index = messages.size() + debounceBuffer.size();
+    for (auto msg : msgs) {
+        msg->setIndex(index);
+        index += 1;
+    }
+
     if (debouncing) {
         debounceBuffer.append(msgs);
         return;
@@ -109,23 +115,46 @@ void CommunicationModel::deserialize(QByteArray data) {
 }
 
 void CommunicationModel::entered(const QModelIndex &index) {
-    if (index.row() < 0 || index.row() >= messages.size()) {
+    if (index.row() < 0 || index.row() >= messages.size() || index.row() == active) {
         return;
     }
 
-//    auto oldActive = active;
-//    auto oldActivePair = activePair;
+    auto oldActive = active;
+    auto oldActivePair = activePair;
 
-//    active = index.row();
+    active = index.row();
+    activePair = -1;
 
-//    if (oldActive != active) {
-////        activePair = messages[active]->
+    if (oldActive >= 0) {
+        emit dataChanged(this->index(oldActive), this->index(oldActive));
+    }
 
-//        emit dataChanged(this->index(oldActive), this->index(oldActive));
-//        emit dataChanged(this->index(active), this->index(active));
+    if (oldActivePair >= 0) {
+        emit dataChanged(this->index(oldActivePair), this->index(oldActivePair));
+    }
 
-//        if (messages[oldActive]->match) {
-//            emit dataChanged(this->index(oldActive), this->index(oldActive));
-//        }
-//    }
+    auto activeMsg = messages[active];
+
+    if (activeMsg->getKind() == Lsp::Message::Kind::Notification) {
+        return;
+    }
+
+    if (activeMsg->getKind() == Lsp::Message::Kind::Request) {
+        auto request = static_cast<Lsp::Request*>(activeMsg.get());
+        if (request->getResponse()) {
+            activePair = request->getResponse()->getIndex();
+        }
+    } else if (activeMsg->getKind() == Lsp::Message::Kind::Response) {
+        auto response = static_cast<Lsp::Response*>(activeMsg.get());
+        if (response->getRequest()) {
+            activePair = response->getRequest()->getIndex();
+        }
+    }
+
+    emit dataChanged(this->index(active), this->index(active));
+
+    if (activePair >= 0) {
+        emit dataChanged(this->index(activePair), this->index(activePair));
+    }
+
 }

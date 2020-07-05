@@ -21,6 +21,7 @@ Message::Message(Context c) : sender(c.sender), timestamp(c.timestamp) {}
 SchemaJson* Message::getIssues() { return issues.get(); }
 Entity Message::getSender() const { return sender; }
 qint64 Message::getTimestamp() const { return timestamp; }
+void Message::setIndex(int index) { this->index = index; }
 int Message::getIndex() const { return index; }
 int Message::getIssueCount() const {
     if (issues) {
@@ -57,6 +58,8 @@ QJsonDocument GenericRequest::getContents() const { return contents; }
 Response::Response(Context c, Id id) : Message(c), id(id) {}
 Message::Kind Response::getKind() const { return Kind::Response; }
 Id Response::getId() const { return id; }
+std::shared_ptr<Request> Response::getRequest() { return request; }
+void Response::setRequest(std::shared_ptr<Request> request) { this->request = request; }
 option<QString> Response::tryGetMethod() const {
     if (!request) {
         return {};
@@ -211,7 +214,7 @@ void LspSchemaValidator::onMessageBatch(MessageBuilder::Message message, QJsonAr
 }
 
 void LspSchemaValidator::onMessageObject(MessageBuilder::Message message, QJsonObject contents) {
-    std::unique_ptr<Message> result;
+    std::shared_ptr<Message> result;
 
     Context c (message.timestamp, sender, QJsonDocument(contents));
 
@@ -266,10 +269,10 @@ void LspSchemaValidator::onMessageObject(MessageBuilder::Message message, QJsonO
         result = buildResponse(c, id.value());
     } else {
         issues.error("Could not identify message kind");
-        result = std::make_unique<GenericMessage>(c);
+        result = std::make_shared<GenericMessage>(c);
     }
 
-    emitLspMessage(std::move(result));
+    emitLspMessage(result);
 }
 
 void LspSchemaValidator::validateJsonrpcMember(Context &c, const QJsonObject &contents) {
@@ -361,7 +364,7 @@ void LspSchemaValidator::validateResponseSuccess(Id id, QJsonValue result, Schem
 
 }
 
-std::unique_ptr<Notification> LspSchemaValidator::buildNotification(Context c, QString method) {
+std::shared_ptr<Notification> LspSchemaValidator::buildNotification(Context c, QString method) {
     return std::make_unique<GenericNotification>(c, method);
 
 //    if (it.key() == "params") {
@@ -377,12 +380,31 @@ std::unique_ptr<Notification> LspSchemaValidator::buildNotification(Context c, Q
 //    }
 }
 
-std::unique_ptr<Request> LspSchemaValidator::buildRequest(Context c, QString method, Id id) {
-    return std::make_unique<GenericRequest>(c, method, id);
+std::shared_ptr<Request> LspSchemaValidator::buildRequest(Context c, QString method, Id id) {
+    auto result = std::make_shared<GenericRequest>(c, method, id);
+
+    auto existing = idTracker.insert(id, result);
+    if (existing) {
+        c.issues.member("id").error("ID already in use");
+    }
+
+    return result;
 }
 
-std::unique_ptr<Response> LspSchemaValidator::buildResponse(Context c, Id id) {
-    return std::make_unique<GenericResponse>(c, id);
+std::shared_ptr<Response> LspSchemaValidator::buildResponse(Context c, Id id) {
+    auto response = std::make_shared<GenericResponse>(c, id);
+
+    auto request = idTracker.retrieve(id);
+    if (request) {
+        response->setRequest(request.value());
+
+        // TODO: Alert model that the response has changed / handle in model
+        request.value()->setResponse(response);
+    } else {
+        c.issues.member("id").error("ID does not correspond to any pending Request");
+    }
+
+    return response;
 
 //    auto match = idTracker.retrieve(id.value());
 //    if (!match) {
@@ -430,8 +452,8 @@ std::unique_ptr<Response> LspSchemaValidator::buildResponse(Context c, Id id) {
 }
 
 template <typename T>
-T IdTracker<T>::insert(Id id, T msg) {
-    T ret (nullptr);
+option<T> IdTracker<T>::insert(Id id, T msg) {
+    option<T> ret {};
 
     if (id.isNumber()) {
         auto it = numberIds.find(id.getNumber());
@@ -453,8 +475,8 @@ T IdTracker<T>::insert(Id id, T msg) {
 }
 
 template <typename T>
-T IdTracker<T>::retrieve(Id id) {
-    T ret;
+option<T> IdTracker<T>::retrieve(Id id) {
+    option<T> ret {};
 
     if (id.isNumber()) {
         auto it = other->numberIds.find(id.getNumber());

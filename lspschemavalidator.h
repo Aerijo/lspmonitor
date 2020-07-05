@@ -416,6 +416,10 @@ public:
     /** Get the duration between the original Requeat and this Response */
     qint64 getDuration() const;
 
+    std::shared_ptr<Request> getRequest();
+
+    void setRequest(std::shared_ptr<Request> request);
+
 private:
     Id id;
 
@@ -451,13 +455,13 @@ public:
      * Inserts the request into the tracker, returning a pointer to the old message stored
      * under that ID if it exists.
      */
-    T insert(Id id, T msg);
+    option<T> insert(Id id, T msg);
 
     /**
      * Returns a pointer to the message stored under that ID if it exists, and
      * removes the message from the tracker.
      */
-    T retrieve(Id id);
+    option<T> retrieve(Id id);
 
 private:
     QMap<QString, T> stringIds {};
@@ -505,11 +509,11 @@ private:
 
     void validateResponseError(QJsonValue errorMethod, SchemaJson& rootIssues);
 
-    std::unique_ptr<Notification> buildNotification(Context c, QString method);
+    std::shared_ptr<Notification> buildNotification(Context c, QString method);
 
-    std::unique_ptr<Request> buildRequest(Context c, QString method, Id id);
+    std::shared_ptr<Request> buildRequest(Context c, QString method, Id id);
 
-    std::unique_ptr<Response> buildResponse(Context c, Id id);
+    std::shared_ptr<Response> buildResponse(Context c, Id id);
 
     Entity sender;
 

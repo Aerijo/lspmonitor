@@ -65,69 +65,64 @@ int main(int argc, char** argv) {
     FilteredCommModel *filtered = new FilteredCommModel();
     filtered->setSourceModel(&mitm->messages);
 
-    QMainWindow *window = new QMainWindow();
-    QSplitter *splitter = new QSplitter(window);
-    splitter->setOrientation(Qt::Vertical);
-    window->setCentralWidget(splitter);
+    auto window = new QMainWindow();
 
-    QPushButton *save = new QPushButton();
-    save->setText("Save");
-    splitter->addWidget(save);
+    auto mainWidget = new QWidget (window);
+    window->setCentralWidget(mainWidget);
 
-    QObject::connect(save, &QPushButton::clicked, &mitm->messages, &CommunicationModel::save);
+    auto mainLayout = new QVBoxLayout (mainWidget);
+    mainLayout->setContentsMargins(0, 0, 0, 0);
 
-    QListView *view = new QListView(splitter);
-    view->setModel(&mitm->messages);
-    view->setVerticalScrollMode(QAbstractItemView::ScrollPerPixel);
-    view->verticalScrollBar()->setSingleStep(25);
+    auto logSplitter = new QSplitter(mainWidget);
+    mainLayout->addWidget(logSplitter);
 
-    splitter->addWidget(view);
+    logSplitter->setOrientation(Qt::Horizontal);
 
+    auto historyWidget = new QWidget(logSplitter);
+    logSplitter->addWidget(historyWidget);
 
+    auto historyLayout = new QVBoxLayout(historyWidget);
 
-    QLineEdit *filterInput = new QLineEdit();
+    auto inputs = new QHBoxLayout(mainWidget);
+    historyLayout->addItem(inputs);
+
+    auto filterInput = new QLineEdit(historyWidget);
+    inputs->addWidget(filterInput);
 
     QObject::connect(filterInput, &QLineEdit::textChanged, filtered, &FilteredCommModel::updateFilter);
 
-    QListView *fview = new QListView(splitter);
-    fview->setModel(filtered);
-    fview->setVerticalScrollMode(QAbstractItemView::ScrollPerPixel);
-    fview->verticalScrollBar()->setSingleStep(25);
+    auto saveButton = new QPushButton(historyWidget);
+    inputs->addWidget(saveButton);
 
+    saveButton->setText("Save");
+    saveButton->setContentsMargins(5, 0, 5, 0);
+    QObject::connect(saveButton, &QPushButton::clicked, &mitm->messages, &CommunicationModel::save);
 
+    auto logView = new QListView(historyWidget);
+    historyLayout->addWidget(logView);
 
-    QVBoxLayout *flay = new QVBoxLayout(splitter);
-    flay->setContentsMargins(0, 0, 0, 0);
+    auto del = new CommunicationDelegate(logView);
 
-    flay->addWidget(filterInput);
-    flay->addWidget(fview);
+    logView->setModel(filtered);
+    logView->setVerticalScrollMode(QAbstractItemView::ScrollPerPixel);
+    logView->verticalScrollBar()->setSingleStep(25);
+    logView->setItemDelegate(del);
+    logView->setAutoScroll(false);
+    logView->setEditTriggers(QAbstractItemView::NoEditTriggers);
 
-    QWidget *fwin = new QWidget(splitter);
-    fwin->setLayout(flay);
+    bool *logAtBottom = new bool();
+    QObject::connect(&mitm->messages, &QAbstractListModel::rowsAboutToBeInserted, [=]{ *logAtBottom = logView->verticalScrollBar()->maximum() == logView->verticalScrollBar()->value(); });
+    QObject::connect(&mitm->messages, &QAbstractListModel::rowsInserted, [=]{ if (*logAtBottom) { logView->scrollToBottom(); } });
 
-    splitter->addWidget(fwin);
+    logView->setMouseTracking(true);
+    QObject::connect(logView, &QListView::entered, &mitm->messages, &CommunicationModel::entered);
 
-    CommunicationDelegate *del = new CommunicationDelegate();
-    view->setItemDelegate(del);
-    view->setAutoScroll(false);
-    view->setEditTriggers(QAbstractItemView::NoEditTriggers);
+    auto detailView = new DetailedViewWidget(logSplitter);
+    logSplitter->addWidget(detailView);
 
-    fview->setItemDelegate(del);
-    fview->setAutoScroll(false);
-    fview->setEditTriggers(QAbstractItemView::NoEditTriggers);
+    QObject::connect(logView->selectionModel(), &QItemSelectionModel::currentChanged, [=](const QModelIndex& current, const QModelIndex &){ detailView->onMessageChange(qvariant_cast<LspMessageItem>(current.data()).message); });
 
-    bool *atBottom = new bool();
-    QObject::connect(&mitm->messages, &QAbstractListModel::rowsAboutToBeInserted, [=]{ *atBottom = view->verticalScrollBar()->maximum() == view->verticalScrollBar()->value(); });
-    QObject::connect(&mitm->messages, &QAbstractListModel::rowsInserted, view, [=]{ if (*atBottom) { view->scrollToBottom(); } });
-
-    bool *atBottomf = new bool();
-    QObject::connect(&mitm->messages, &QAbstractListModel::rowsAboutToBeInserted, [=]{ *atBottomf = fview->verticalScrollBar()->maximum() == fview->verticalScrollBar()->value(); });
-    QObject::connect(&mitm->messages, &QAbstractListModel::rowsInserted, fview, [=]{ if (*atBottomf) { fview->scrollToBottom(); } });
-
-    view->setMouseTracking(true);
-    QObject::connect(view, &QListView::entered, &mitm->messages, &CommunicationModel::entered);
-
-
+    mainWidget->setLayout(mainLayout);
     window->show();
 
     return app->exec();

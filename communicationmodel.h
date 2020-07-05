@@ -15,7 +15,9 @@ public:
 
     std::shared_ptr<Lsp::Message> message;
 
-    bool match = false;
+    bool active = false;
+
+    bool pair = false;
 };
 
 Q_DECLARE_METATYPE(LspMessageItem);
@@ -56,13 +58,14 @@ private:
 
     void deserialize(QByteArray data);
 
-    int active = -1;
-    int activePair = -1;
+    int active = -1; // The currently moused over message index
+
+    int activePair = -1; // The pair to the moused over message index (Request <-> Response) (-1 if active is Notification)
 };
 
 class CommunicationDelegate : public QStyledItemDelegate {
 public:
-    CommunicationDelegate() : QStyledItemDelegate(nullptr) {
+    CommunicationDelegate(QObject *parent = nullptr) : QStyledItemDelegate(parent) {
         notifClient = QIcon(":/icons/resources/bell-solid.svg");
         notifServer = notifClient;
 
@@ -96,13 +99,17 @@ public:
 
         QString sum;
 
+        sum += QString::number(msg->getIndex()) + " ";
+
         QDateTime timestamp;
         timestamp.setTime_t(msg->getTimestamp() / 1000);
         sum += timestamp.toString(Qt::SystemLocaleShortDate) + ": ";
 
-//        if (msg->getKind() == Lsp::Message::Kind::Response && msg->match) {
-//            sum += "(+" + QString::number(msg->timestamp - msg->match->timestamp) + ") ";
-//        }
+        if (msg->getKind() == Lsp::Message::Kind::Response) {
+            auto response = static_cast<Lsp::Response*>(msg.get());
+            auto duration = response->getDuration();
+            sum += "(+" + QString::number(duration) + ") ";
+        }
 
         switch (msg->getSender()) {
             case Lsp::Entity::Client:
@@ -112,25 +119,26 @@ public:
                 sum += "Server";
                 break;
             default:
-                sum += "Unknown";
+                sum += "UNKNOWN SENDER";
                 break;
         }
 
         sum += " sent a ";
 
         QIcon icon = unknown;
+        QString method = msg->tryGetMethod().value_or("UNKNOWN METHOD");
 
         switch (msg->getKind()) {
             case Lsp::Message::Kind::Notification:
-                sum += "Notification (" + msg->getContents()["method"].toString() + ")";
+                sum += "Notification (" + method + ")";
                 icon = notifClient;
                 break;
             case Lsp::Message::Kind::Request:
-                sum += "Request (" + QString::number(msg->getContents()["id"].toInt()) + ", " + msg->getContents()["method"].toString() + ")";
+                sum += "Request (" + QString::number(msg->getContents()["id"].toInt()) + ", " + method + ")";
                 icon = requestClient;
                 break;
             case Lsp::Message::Kind::Response:
-                sum += "Response (" + QString::number(msg->getContents()["id"].toInt()) + ", " + /*removed*/ + ")"; // removed = (msg->match ? msg->match->contents["method"].toString() : "UNKNOWN")
+                sum += "Response (" + QString::number(msg->getContents()["id"].toInt()) + ", " + method + ")";
                 icon = responseClient;
                 break;
             case Lsp::Message::Kind::Batch:
@@ -164,6 +172,9 @@ public:
             painter->fillRect(option.rect, option.palette.highlight());
             painter->setPen(option.palette.highlightedText().color());
         } else {
+            if (item.pair) {
+                painter->fillRect(option.rect, QColor("#E17666"));
+            }
             painter->setPen(option.palette.text().color());
         }
 
@@ -177,7 +188,6 @@ public:
 
     QSize sizeHint(const QStyleOptionViewItem &option, const QModelIndex &index) const override {
         auto item = qvariant_cast<LspMessageItem>(index.data());
-//        auto text = item.message->method;
         QString text = "foo";
 
         QFontMetrics met (QFont ("Source Code Pro"));
@@ -282,6 +292,38 @@ protected:
 
 private:
     LogFilter filter;
+};
+
+#include <QLayout>
+#include <QLabel>
+#include <QTextEdit>
+
+class DetailedViewWidget : public QWidget {
+    Q_OBJECT
+
+public:
+    DetailedViewWidget(QWidget *parent = nullptr) : QWidget(parent) {
+        layout.addWidget(&methodLabel);
+
+        layout.addWidget(&contents);
+
+        setLayout(&layout);
+    }
+
+public slots:
+    void onMessageChange(std::shared_ptr<Lsp::Message> msg) {
+        methodLabel.setText(msg->tryGetMethod().value_or("NO METHOD"));
+
+        contents.setText(msg->getContents().toJson(QJsonDocument::Indented));
+    };
+
+private:
+    QVBoxLayout layout {};
+
+    QLabel methodLabel {};
+
+    QTextEdit contents {};
+
 };
 
 #endif // COMMUNICATIONMODEL_H

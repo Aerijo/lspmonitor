@@ -51,13 +51,13 @@ public slots:
 private:
     QProcess *server;
 
-    InputStream *clientIn;
+    std::unique_ptr<InputStream> clientIn;
 
-    OutputStream *clientOut;
+    std::unique_ptr<OutputStream> clientOut;
 
-    InputStream *serverIn;
+    std::unique_ptr<InputStream> serverIn;
 
-    OutputStream *serverOut;
+    std::unique_ptr<OutputStream> serverOut;
 
     FrameBuilder::FrameBuilder clientFrames;
 
