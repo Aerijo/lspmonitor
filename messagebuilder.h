@@ -67,7 +67,11 @@ struct Message {
     /** The contents of the message */
     QJsonDocument contents;
 
-    Message(qint64 timestamp, QJsonDocument contents) : timestamp(timestamp), contents(contents) {}
+    /** The size in bytes of the Frame */
+    int size;
+
+    Message(FrameBuilder::Frame frame, QJsonDocument contents);
+    Message(qint64 timestamp, QJsonDocument contents, int size);
 };
 
 /**

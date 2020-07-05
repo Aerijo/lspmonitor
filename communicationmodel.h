@@ -312,7 +312,7 @@ public:
 
 public slots:
     void onMessageChange(std::shared_ptr<Lsp::Message> msg) {
-        methodLabel.setText(msg->tryGetMethod().value_or("NO METHOD"));
+        methodLabel.setText(msg->tryGetMethod().value_or("NO METHOD") + " (" + QString::number(msg->getSize()) + "b)");
 
         contents.setText(msg->getContents().toJson(QJsonDocument::Indented));
     };

@@ -15,9 +15,10 @@ bool Id::isString() const { return kind == Kind::String; }
 int Id::getNumber() const { return numberId; }
 QString Id::getString() const { return stringId; }
 
-Context::Context(qint64 timestamp, Entity sender, QJsonDocument contents) : timestamp(timestamp), sender(sender), contents(contents) {}
+Context::Context(MessageBuilder::Message message, Entity sender) : Context(message.timestamp, sender, message.contents, message.size) {}
+Context::Context(qint64 timestamp, Entity sender, QJsonDocument contents, int size) : timestamp(timestamp), sender(sender), contents(contents), size(size) {}
 
-Message::Message(Context c) : sender(c.sender), timestamp(c.timestamp) {}
+Message::Message(Context c) : sender(c.sender), timestamp(c.timestamp), size(c.size) {}
 SchemaJson* Message::getIssues() { return issues.get(); }
 Entity Message::getSender() const { return sender; }
 qint64 Message::getTimestamp() const { return timestamp; }
@@ -30,6 +31,7 @@ int Message::getIssueCount() const {
         return 0;
     }
 }
+int Message::getSize() const { return size; }
 
 GenericMessage::GenericMessage(Context c) : Message(c), contents(c.contents) {}
 option<QString> GenericMessage::tryGetMethod() const { return {}; }
@@ -189,7 +191,7 @@ void LspSchemaValidator::onMessage(MessageBuilder::Message message) {
     } else if (root.isObject()) {
         onMessageObject(message, root.object());
     } else {
-        Context c (message.timestamp, sender, message.contents);
+        Context c (message, sender);
         auto lsp = std::make_shared<GenericMessage>(c);
         lsp->getIssues()->error("Unexpected message JSON type");
         emit emitLspMessage(lsp);
@@ -197,26 +199,28 @@ void LspSchemaValidator::onMessage(MessageBuilder::Message message) {
 }
 
 void LspSchemaValidator::onMessageBatch(MessageBuilder::Message message, QJsonArray batch) {
+    // TODO: Add support
+    throw QUnhandledException();
     // Batched messages, for now just turn them into individual messages
-    for (QJsonValue entry : batch) {
-        if (entry.isObject()) {
-            onMessage(MessageBuilder::Message(message.timestamp, QJsonDocument(entry.toObject())));
-        } else {
-            // Note: Fallthrough / recursive call not used because constructing a meaningful Message with the
-            // QJsonDocument incompatible value is difficult. Also it may cause a child array to be interpreted
-            // as a batch itself, which is forbidden
-//            auto errMsg = std::make_shared<LspMessage>(message);
-//            errMsg->issues.error("Unexpected message JSON type");
-//            emitLspMessage(errMsg);
-            throw QUnhandledException();
-        }
-    }
+//    for (QJsonValue entry : batch) {
+//        if (entry.isObject()) {
+//            onMessage(MessageBuilder::Message(message.timestamp, QJsonDocument(entry.toObject())));
+//        } else {
+//            // Note: Fallthrough / recursive call not used because constructing a meaningful Message with the
+//            // QJsonDocument incompatible value is difficult. Also it may cause a child array to be interpreted
+//            // as a batch itself, which is forbidden
+////            auto errMsg = std::make_shared<LspMessage>(message);
+////            errMsg->issues.error("Unexpected message JSON type");
+////            emitLspMessage(errMsg);
+//            throw QUnhandledException();
+//        }
+//    }
 }
 
 void LspSchemaValidator::onMessageObject(MessageBuilder::Message message, QJsonObject contents) {
     std::shared_ptr<Message> result;
 
-    Context c (message.timestamp, sender, QJsonDocument(contents));
+    Context c (message, sender);
 
     // Ensure "jsonrpc" member correct
     validateJsonrpcMember(c, contents);

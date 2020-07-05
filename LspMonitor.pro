@@ -10,7 +10,6 @@ SOURCES += \
     communicationmodel.cpp \
     connectionstream.cpp \
     framebuilder.cpp \
-    lspmessagebuilder.cpp \
     lspschemavalidator.cpp \
     main.cpp \
     messagebuilder.cpp \

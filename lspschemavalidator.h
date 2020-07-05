@@ -258,8 +258,10 @@ struct Context {
     Entity sender;
     QJsonDocument contents;
     SchemaJson issues = SchemaJson::makeObject();
+    int size;
 
-    Context(qint64 timestamp, Entity sender, QJsonDocument contents);
+    Context(MessageBuilder::Message msg, Entity sender);
+    Context(qint64 timestamp, Entity sender, QJsonDocument contents, int size);
 };
 
 /**
@@ -300,6 +302,8 @@ public:
 
     int getIssueCount() const;
 
+    int getSize() const;
+
     virtual option<QString> tryGetMethod() const = 0;
 
     virtual Kind getKind() const = 0;
@@ -320,6 +324,8 @@ private:
 
     /** The index of the message in the overall sequence */
     int index = -1;
+
+    int size = -1;
 };
 
 /**

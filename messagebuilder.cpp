@@ -6,6 +6,10 @@
 
 namespace MessageBuilder {
 
+Message::Message(FrameBuilder::Frame frame, QJsonDocument contents) : Message(frame.timestamp, contents, frame.frameEnd - frame.frameStart) {}
+Message::Message(qint64 timestamp, QJsonDocument contents, int size) : timestamp(timestamp), contents(contents), size(size) {}
+
+
 HeaderParser::HeaderParser(QString value) : value(value) {}
 
 QString HeaderParser::parse(char c) {
@@ -216,7 +220,7 @@ void MessageBuilder::onFrame(FrameBuilder::Frame frame) {
         // (matched by Qt parsing rules). So we don't bother
         // trying to support other kinds of root value.
 
-        emit emitMessage(Message(frame.timestamp, doc));
+        emit emitMessage(Message(frame, doc));
     } else {
         emit emitError();
     }
